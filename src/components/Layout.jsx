@@ -45,22 +45,16 @@ const Layout = ({ children }) => {
           justifyContent: 'space-between'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           <img 
-            src={user?.storePic ? getImageUrl(user.storePic) : "/logo.png"} 
-            alt="Logo" 
+            src="/logo.png" 
+            alt="Zudo Logo" 
             style={{ 
-              width: '32px', 
-              height: '32px', 
-              objectFit: 'cover',
-              background: 'white', 
-              borderRadius: '8px', 
-              padding: user?.storePic ? '0' : '4px' 
+              height: '40px',
+              width: 'auto',
+              objectFit: 'contain'
             }} 
           />
-          <span style={{ fontWeight: 800, fontSize: '18px', color: 'var(--text-main)' }}>
-            {user?.businessName || user?.storeName || user?.name || 'Seller'}
-          </span>
         </div>
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
