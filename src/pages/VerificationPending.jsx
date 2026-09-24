@@ -11,7 +11,13 @@ const VerificationPending = () => {
     setChecking(true);
     try {
       const { data } = await api.get('/sellers/me');
-      if (data.isVerified) {
+      if (data.status === 'rejected') {
+        localStorage.removeItem('zudo_seller_token');
+        localStorage.removeItem('zudo_seller_user');
+        localStorage.removeItem('zudo_seller_location');
+        alert('Your application has been rejected by the admin team. Please contact support for more details.');
+        navigate('/login');
+      } else if (data.isVerified) {
         // Update local storage
         const user = JSON.parse(localStorage.getItem('zudo_seller_user') || '{}');
         user.isVerified = true;
