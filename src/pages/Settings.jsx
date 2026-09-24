@@ -21,6 +21,8 @@ const Settings = () => {
     storeName: '',
     billingAddress: '',
     phone: '',
+    gstNo: '',
+    panNo: '',
     pickupLocation: {
       lat: 28.6139,
       lng: 77.2090,
@@ -44,6 +46,8 @@ const Settings = () => {
         storeName: data.storeName || data.businessName || '',
         billingAddress: data.billingAddress || data.businessAddress || '',
         phone: data.phone || '',
+        gstNo: data.gstNo || '',
+        panNo: data.panNo || '',
         pickupLocation: data.pickupLocation || {
           lat: 28.6139,
           lng: 77.2090,
@@ -179,12 +183,22 @@ const Settings = () => {
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Phone Number</label>
                   <input type="tel" className="input-field" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} required />
                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>GST Registration No</label>
+                  <input type="text" className="input-field" value={formData.gstNo} onChange={e => setFormData({ ...formData, gstNo: e.target.value.toUpperCase() })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>PAN Card No</label>
+                  <input type="text" className="input-field" value={formData.panNo} onChange={e => setFormData({ ...formData, panNo: e.target.value.toUpperCase() })} required />
+                </div>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0 40px' }}>
                 <InfoRow label="Full Name" value={profile.name} icon={User} />
                 <InfoRow label="Store Name" value={profile.storeName} icon={Store} color="#8b5cf6" />
                 <InfoRow label="Phone Number" value={profile.phone} icon={Phone} color="#ec4899" />
+                <InfoRow label="GST Registration No" value={profile.gstNo} icon={Store} color="#eab308" />
+                <InfoRow label="PAN Card No" value={profile.panNo} icon={Store} color="#3b82f6" />
               </div>
             )}
           </div>

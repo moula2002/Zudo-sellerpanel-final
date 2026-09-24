@@ -18,14 +18,18 @@ const CompleteProfile = () => {
     gstDoc: '',
     panDoc: '',
     tradeLicenseDoc: '',
-    rmcAmpcDoc: ''
+    rmcAmpcDoc: '',
+    gstNo: '',
+    panNo: '',
+    foodLicenseDoc: ''
   });
   const [uploading, setUploading] = useState({
     storePic: false,
     gstDoc: false,
     panDoc: false,
     tradeLicenseDoc: false,
-    rmcAmpcDoc: false
+    rmcAmpcDoc: false,
+    foodLicenseDoc: false
   });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -122,6 +126,14 @@ const CompleteProfile = () => {
     }
     if (!formData.panDoc) {
       alert('Please upload your Company PAN');
+      return;
+    }
+    if (!formData.gstNo) {
+      alert('Please enter your GST Registration Number');
+      return;
+    }
+    if (!formData.panNo) {
+      alert('Please enter your PAN Card Number');
       return;
     }
 
@@ -233,12 +245,39 @@ const CompleteProfile = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>Store Settings & Legal Documents</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 600, color: '#94a3b8' }}>GST Registration Number *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. 22AAAAA0000A1Z5"
+                  required
+                  value={formData.gstNo}
+                  onChange={e => setFormData({ ...formData, gstNo: e.target.value.toUpperCase() })}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 600, color: '#94a3b8' }}>PAN Card Number *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. ABCDE1234F"
+                  required
+                  value={formData.panNo}
+                  onChange={e => setFormData({ ...formData, panNo: e.target.value.toUpperCase() })}
+                />
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
               <DocumentUpload label="Store Logo/Picture *" field="storePic" value={formData.storePic} />
               <DocumentUpload label="GST Document *" field="gstDoc" value={formData.gstDoc} />
               <DocumentUpload label="Company PAN *" field="panDoc" value={formData.panDoc} />
               <DocumentUpload label="Trade Licence" field="tradeLicenseDoc" value={formData.tradeLicenseDoc} />
               <DocumentUpload label="RMC/AMPC Licence" field="rmcAmpcDoc" value={formData.rmcAmpcDoc} />
+              <DocumentUpload label="Food Licence" field="foodLicenseDoc" value={formData.foodLicenseDoc} />
             </div>
           </div>
 
