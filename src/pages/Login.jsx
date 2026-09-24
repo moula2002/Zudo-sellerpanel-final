@@ -41,6 +41,10 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    
+    // Clear any existing token to prevent the backend from rejecting the login request due to an expired token
+    localStorage.removeItem('zudo_seller_token');
+    
     try {
       const { data } = await api.post('/sellers/login', { 
         email: email.trim(), 
@@ -122,7 +126,10 @@ const Login = () => {
               style={{ paddingLeft: '48px' }}
               required 
               value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError('');
+              }} 
             />
           </div>
           <div style={{ position: 'relative' }}>
@@ -134,7 +141,10 @@ const Login = () => {
               style={{ paddingLeft: '48px', paddingRight: '48px' }}
               required 
               value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError('');
+              }} 
             />
             <button
               type="button"
@@ -164,7 +174,10 @@ const Login = () => {
               style={{ paddingLeft: '48px', appearance: 'none' }}
               required 
               value={selectedLocation} 
-              onChange={(e) => setSelectedLocation(e.target.value)}
+              onChange={(e) => {
+                setSelectedLocation(e.target.value);
+                setError('');
+              }}
               disabled={fetchingLocations}
             >
               <option value="" disabled>Select Location</option>
