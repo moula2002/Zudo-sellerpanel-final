@@ -35,6 +35,24 @@ const setupInterceptors = (instance) => {
     }
     return config;
   });
+
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response && error.response.status === 401) {
+        if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
+          alert('Session expired. You have logged in from another device.');
+        } else {
+          // alert('Session expired. Please log in again.');
+        }
+        localStorage.removeItem('zudo_seller_token');
+        localStorage.removeItem('zudo_seller_user');
+        localStorage.removeItem('zudo_seller_location');
+        window.location.href = '/login';
+      }
+      return Promise.reject(error);
+    }
+  );
 };
 
 setupInterceptors(api);

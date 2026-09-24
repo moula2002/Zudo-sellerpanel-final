@@ -19,8 +19,8 @@ const CompleteProfile = () => {
     panDoc: '',
     tradeLicenseDoc: '',
     rmcAmpcDoc: '',
-    gstNo: '',
-    panNo: '',
+    gstNumber: '',
+    panNumber: '',
     foodLicenseDoc: ''
   });
   const [uploading, setUploading] = useState({
@@ -128,11 +128,11 @@ const CompleteProfile = () => {
       alert('Please upload your Company PAN');
       return;
     }
-    if (!formData.gstNo) {
+    if (!formData.gstNumber) {
       alert('Please enter your GST Registration Number');
       return;
     }
-    if (!formData.panNo) {
+    if (!formData.panNumber) {
       alert('Please enter your PAN Card Number');
       return;
     }
@@ -254,8 +254,8 @@ const CompleteProfile = () => {
                   className="input-field"
                   placeholder="e.g. 22AAAAA0000A1Z5"
                   required
-                  value={formData.gstNo}
-                  onChange={e => setFormData({ ...formData, gstNo: e.target.value.toUpperCase() })}
+                  value={formData.gstNumber}
+                  onChange={e => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -265,8 +265,8 @@ const CompleteProfile = () => {
                   className="input-field"
                   placeholder="e.g. ABCDE1234F"
                   required
-                  value={formData.panNo}
-                  onChange={e => setFormData({ ...formData, panNo: e.target.value.toUpperCase() })}
+                  value={formData.panNumber}
+                  onChange={e => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
                 />
               </div>
             </div>
