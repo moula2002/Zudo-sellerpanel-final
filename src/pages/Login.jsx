@@ -22,8 +22,18 @@ const Login = () => {
         // Set default location if available
         if (data.length > 0) {
           const storedLoc = localStorage.getItem('zudo_seller_location');
-          if (storedLoc && data.find(l => l.name === storedLoc)) {
-            setSelectedLocation(storedLoc);
+          if (storedLoc) {
+            const matchedLoc = data.find(l => 
+              l.name === storedLoc || 
+              l.dbName === storedLoc || 
+              l.name === `zudo-${storedLoc}` || 
+              l.dbName === `zudo-${storedLoc}`
+            );
+            if (matchedLoc) {
+              setSelectedLocation(matchedLoc.name);
+            } else {
+              setSelectedLocation(data[0].name);
+            }
           } else {
             setSelectedLocation(data[0].name);
           }
@@ -46,17 +56,20 @@ const Login = () => {
     localStorage.removeItem('zudo_seller_token');
     
     try {
+      const locObj = locations.find(l => l.name === selectedLocation);
+      const dbLocation = locObj?.dbName || selectedLocation;
+
       const { data } = await api.post('/sellers/login', { 
         email: email.trim(), 
         password,
-        location: selectedLocation 
+        location: dbLocation 
       }, {
-        headers: { 'x-location': selectedLocation }
+        headers: { 'x-location': dbLocation }
       });
       localStorage.setItem('zudo_seller_token', data.token);
       localStorage.setItem('zudo_seller_user', JSON.stringify(data));
-      // Use the actual location where the backend found the seller, or fallback to selectedLocation
-      const actualLocation = data.dbName ? data.dbName.replace('zudo-', '') : selectedLocation;
+      // Use the actual location where the backend found the seller, or fallback to dbLocation
+      const actualLocation = data.dbName ? data.dbName.replace('zudo-', '') : dbLocation;
       localStorage.setItem('zudo_seller_location', actualLocation);
       
       if (!data.isProfileComplete) {
