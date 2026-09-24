@@ -43,7 +43,7 @@ const Login = () => {
     setError('');
     try {
       const { data } = await api.post('/sellers/login', { 
-        email, 
+        email: email.trim(), 
         password,
         location: selectedLocation 
       }, {
@@ -51,7 +51,9 @@ const Login = () => {
       });
       localStorage.setItem('zudo_seller_token', data.token);
       localStorage.setItem('zudo_seller_user', JSON.stringify(data));
-      localStorage.setItem('zudo_seller_location', selectedLocation);
+      // Use the actual location where the backend found the seller, or fallback to selectedLocation
+      const actualLocation = data.dbName ? data.dbName.replace('zudo-', '') : selectedLocation;
+      localStorage.setItem('zudo_seller_location', actualLocation);
       
       if (!data.isProfileComplete) {
         navigate('/complete-profile');
