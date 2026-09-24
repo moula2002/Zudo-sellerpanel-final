@@ -38,15 +38,16 @@ const CompleteProfile = () => {
   const MAPS_API_KEY = 'AIzaSyDXn6KSA4exy08KiKicYZ53wCfs20__qWU';
 
   const handleLocationSelect = (coords) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
+      billingAddress: coords.address || prev.billingAddress,
       pickupLocation: {
-        ...formData.pickupLocation,
+        ...prev.pickupLocation,
         lat: coords.lat,
         lng: coords.lng,
-        address: coords.address || formData.pickupLocation.address
+        address: coords.address || prev.pickupLocation.address
       }
-    });
+    }));
   };
 
   const handleFileUpload = async (e, field) => {

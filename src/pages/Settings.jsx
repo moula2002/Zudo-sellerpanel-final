@@ -21,8 +21,8 @@ const Settings = () => {
     storeName: '',
     billingAddress: '',
     phone: '',
-    gstNo: '',
-    panNo: '',
+    gstNumber: '',
+    panNumber: '',
     pickupLocation: {
       lat: 28.6139,
       lng: 77.2090,
@@ -46,8 +46,8 @@ const Settings = () => {
         storeName: data.storeName || data.businessName || '',
         billingAddress: data.billingAddress || data.businessAddress || '',
         phone: data.phone || '',
-        gstNo: data.gstNo || '',
-        panNo: data.panNo || '',
+        gstNumber: data.gstNumber || '',
+        panNumber: data.panNumber || '',
         pickupLocation: data.pickupLocation || {
           lat: 28.6139,
           lng: 77.2090,
@@ -72,6 +72,7 @@ const Settings = () => {
   const handleLocationSelect = (coords) => {
     setFormData(prev => ({
       ...prev,
+      billingAddress: coords.address || prev.billingAddress,
       pickupLocation: {
         ...prev.pickupLocation,
         lat: coords.lat,
@@ -185,11 +186,11 @@ const Settings = () => {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>GST Registration No</label>
-                  <input type="text" className="input-field" value={formData.gstNo} onChange={e => setFormData({ ...formData, gstNo: e.target.value.toUpperCase() })} required />
+                  <input type="text" className="input-field" value={formData.gstNumber} onChange={e => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })} required />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>PAN Card No</label>
-                  <input type="text" className="input-field" value={formData.panNo} onChange={e => setFormData({ ...formData, panNo: e.target.value.toUpperCase() })} required />
+                  <input type="text" className="input-field" value={formData.panNumber} onChange={e => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })} required />
                 </div>
               </div>
             ) : (
@@ -197,8 +198,8 @@ const Settings = () => {
                 <InfoRow label="Full Name" value={profile.name} icon={User} />
                 <InfoRow label="Store Name" value={profile.storeName} icon={Store} color="#8b5cf6" />
                 <InfoRow label="Phone Number" value={profile.phone} icon={Phone} color="#ec4899" />
-                <InfoRow label="GST Registration No" value={profile.gstNo} icon={Store} color="#eab308" />
-                <InfoRow label="PAN Card No" value={profile.panNo} icon={Store} color="#3b82f6" />
+                <InfoRow label="GST Registration No" value={profile.gstNumber} icon={Store} color="#eab308" />
+                <InfoRow label="PAN Card No" value={profile.panNumber} icon={Store} color="#3b82f6" />
               </div>
             )}
           </div>
