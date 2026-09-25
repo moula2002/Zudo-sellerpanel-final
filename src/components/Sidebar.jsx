@@ -13,7 +13,8 @@ import {
   FileSpreadsheet,
   RotateCcw,
   Rss,
-  FileText
+  FileText,
+  Layers
 } from 'lucide-react';
 import { useTheme } from '../utils/ThemeContext';
 
@@ -132,6 +133,8 @@ const Sidebar = ({ isOpen, onClose }) => {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
           <SidebarItem to="/" icon={LayoutDashboard} label="Dashboard" />
+          <SidebarItem to="/categories" icon={Layers} label="Categories" />
+          <SidebarItem to="/subcategories" icon={Layers} label="SubCategories" />
           <SidebarItem to="/products" icon={Package} label="Products" />
           <SidebarItem to="/products/bulk" icon={FileSpreadsheet} label="Bulk Upload" />
           <SidebarItem to="/feed-upload" icon={Rss} label="Feed Upload" />

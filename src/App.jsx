@@ -15,6 +15,8 @@ import Returns from './pages/Returns';
 import VerificationPending from './pages/VerificationPending';
 import FeedUpload from './pages/FeedUpload';
 import Invoices from './pages/Invoices';
+import Categories from './pages/Categories';
+import SubCategories from './pages/SubCategories';
 
 import { ThemeProvider } from './utils/ThemeContext';
 
@@ -114,6 +116,22 @@ function App() {
           element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/categories" 
+          element={
+            <ProtectedRoute>
+              <Categories />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/subcategories" 
+          element={
+            <ProtectedRoute>
+              <SubCategories />
             </ProtectedRoute>
           } 
         />
