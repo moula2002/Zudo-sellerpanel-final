@@ -8,6 +8,7 @@ const Invoices = () => {
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,6 +35,10 @@ const Invoices = () => {
       setError('Please select both start and end dates.');
       return;
     }
+    if (!invoiceNumber) {
+      setError('Please enter your invoice number.');
+      return;
+    }
     if (new Date(startDate) > new Date(endDate)) {
       setError('Start date cannot be after end date.');
       return;
@@ -41,10 +46,11 @@ const Invoices = () => {
 
     setGenerating(true);
     try {
-      const { data } = await api.post('/seller-invoices/generate', { startDate, endDate });
+      const { data } = await api.post('/seller-invoices/generate', { startDate, endDate, invoiceNumber });
       setInvoices([data, ...invoices]);
       setStartDate('');
       setEndDate('');
+      setInvoiceNumber('');
       alert('Invoice generated successfully and sent to Admin!');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to generate invoice. No orders found or date overlaps.');
@@ -106,6 +112,16 @@ const Invoices = () => {
               max={new Date().toISOString().split('T')[0]}
             />
           </div>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '8px' }}>INVOICE NUMBER</label>
+            <input 
+              type="text" 
+              placeholder="e.g. INV-2024-001"
+              className="input-field" 
+              value={invoiceNumber} 
+              onChange={(e) => setInvoiceNumber(e.target.value)}
+            />
+          </div>
           <button type="submit" className="btn-primary" disabled={generating} style={{ height: '48px', padding: '0 24px', whiteSpace: 'nowrap' }}>
             {generating ? 'Generating...' : (
               <>
@@ -142,7 +158,7 @@ const Invoices = () => {
               </tr>
             ) : invoices.map((inv) => (
               <tr key={inv._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
-                <td style={{ padding: '16px 24px', fontWeight: 600 }}>#{inv._id.toString().substring(0,8).toUpperCase()}</td>
+                <td style={{ padding: '16px 24px', fontWeight: 600 }}>{inv.invoiceNumber || `#${inv._id.toString().substring(0,8).toUpperCase()}`}</td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
                     <Calendar size={14} style={{ color: 'var(--text-dim)' }} />
