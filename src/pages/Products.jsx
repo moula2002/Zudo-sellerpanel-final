@@ -117,6 +117,9 @@ const ProductDetailModal = ({ product, onClose }) => {
                 </div>
               </div>
               <h2 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '6px', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>{product.name}</h2>
+              <div style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
+                SELLER: <span style={{ color: 'var(--primary)', fontWeight: 800 }}>{product.sellerName || 'Your Store'}</span>
+              </div>
               <div style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 500 }}>PRODUCT SKU: <span style={{ color: 'var(--text-main)' }}>{product.sku || 'N/A'}</span></div>
             </div>
 
