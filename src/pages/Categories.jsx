@@ -153,15 +153,15 @@ const Categories = () => {
         </div>
 
         {showAddCategory && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '24px' }}>
-            <div className="glass-card" style={{ width: '100%', maxWidth: '400px', borderRadius: '32px', overflow: 'hidden', border: '1px solid var(--glass-border)' }}>
-              <div style={{ padding: '32px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--card-bg)' }}>
-                <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>Add Category</h3>
-                <button onClick={() => setShowAddCategory(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
-                  <XCircle size={24} />
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '24px' }}>
+            <div className="glass-card" style={{ width: '100%', maxWidth: '400px', borderRadius: '24px', overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--card-bg)' }}>
+              <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '20px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>Add Category</h3>
+                <button onClick={() => setShowAddCategory(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}>
+                  <XCircle size={20} />
                 </button>
               </div>
-              <div style={{ padding: '32px' }}>
+              <div style={{ padding: '24px' }}>
                 <form onSubmit={handleAddCategory} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '8px' }}>Category Name</label>
