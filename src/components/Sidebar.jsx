@@ -127,8 +127,26 @@ const Sidebar = ({ isOpen, onClose }) => {
           `}
         </style>
 
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 20px 0' }}>
-          <img src="/logo.png" alt="Zudo Logo" style={{ maxWidth: '160px', height: 'auto', objectFit: 'contain' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 0 20px 0' }}>
+          <img src="/logo.png" alt="Zudo Logo" style={{ maxWidth: '160px', height: 'auto', objectFit: 'contain', marginBottom: '16px' }} />
+          {seller && (
+            <div style={{
+              background: 'rgba(99, 102, 241, 0.1)',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              width: '100%',
+              textAlign: 'center',
+              color: 'var(--primary)',
+              fontWeight: '600',
+              fontSize: '14px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {seller.storeName || seller.businessName || seller.name || 'Zudo Seller'}
+            </div>
+          )}
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>

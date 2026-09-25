@@ -55,6 +55,24 @@ const Layout = ({ children }) => {
               objectFit: 'contain'
             }} 
           />
+          {user && (
+            <div style={{
+              marginLeft: '12px',
+              padding: '4px 12px',
+              background: 'rgba(99, 102, 241, 0.1)',
+              borderRadius: '6px',
+              color: 'var(--primary)',
+              fontWeight: '600',
+              fontSize: '13px',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              maxWidth: '120px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {user.storeName || user.businessName || user.name || 'Zudo Seller'}
+            </div>
+          )}
         </div>
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
