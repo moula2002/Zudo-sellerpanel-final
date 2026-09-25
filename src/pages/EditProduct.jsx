@@ -221,9 +221,9 @@ const EditProduct = () => {
               width: '45px',
               height: '45px',
               borderRadius: '15px',
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: 'white',
+              background: 'var(--card-bg)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-main)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -235,8 +235,8 @@ const EditProduct = () => {
             <ChevronLeft size={24} />
           </button>
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-0.5px' }}>Edit Product</h1>
-            <p style={{ color: '#94a3b8', fontSize: '15px' }}>Update your listing details.</p>
+            <h1 style={{ fontSize: '32px', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Edit Product</h1>
+            <p style={{ color: 'var(--text-dim)', fontSize: '15px' }}>Update your listing details.</p>
           </div>
         </div>
 

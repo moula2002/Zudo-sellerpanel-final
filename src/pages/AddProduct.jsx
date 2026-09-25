@@ -149,13 +149,13 @@ const AddProduct = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         <button 
           onClick={() => navigate('/products')} 
-          style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
         >
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h2 style={{ fontSize: '24px', fontWeight: 700 }}>Add New Product</h2>
-          <p style={{ fontSize: '14px', color: '#94a3b8' }}>Create a new item in your inventory</p>
+          <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>Add New Product</h2>
+          <p style={{ fontSize: '14px', color: 'var(--text-dim)' }}>Create a new item in your inventory</p>
         </div>
       </div>
 
