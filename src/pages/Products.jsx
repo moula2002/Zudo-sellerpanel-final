@@ -194,6 +194,7 @@ const Products = () => {
   const [selectedCat, setSelectedCat] = useState('');
   const [selectedSubCat, setSelectedSubCat] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [deleteModalData, setDeleteModalData] = useState({ show: false, productId: null, productName: '' });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -221,14 +222,17 @@ const Products = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      try {
-        await api.delete(`/products/${id}`);
-        setProducts(products.filter(p => p._id !== id));
-      } catch (err) {
-        alert('Failed to delete product');
-      }
+  const openDeleteModal = (id, name) => {
+    setDeleteModalData({ show: true, productId: id, productName: name });
+  };
+
+  const confirmDeleteProduct = async () => {
+    try {
+      await api.delete(`/products/${deleteModalData.productId}`);
+      setProducts(products.filter(p => p._id !== deleteModalData.productId));
+      setDeleteModalData({ show: false, productId: null, productName: '' });
+    } catch (err) {
+      alert('Failed to delete product');
     }
   };
 
@@ -428,7 +432,7 @@ const Products = () => {
                         <Edit2 size={16} />
                       </button>
                       <button 
-                        onClick={() => handleDelete(product._id)}
+                        onClick={() => openDeleteModal(product._id, product.name)}
                         title="Delete Product"
                         style={{ padding: '8px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.05)', border: 'none', color: '#ef4444', cursor: 'pointer' }}
                       >
@@ -493,6 +497,38 @@ const Products = () => {
         product={selectedProduct} 
         onClose={() => setSelectedProduct(null)} 
       />
+
+      {/* Custom Delete Modal */}
+      {deleteModalData.show && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div className="glass-card" style={{ padding: '32px', borderRadius: '24px', width: '360px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', color: '#ef4444' }}>
+              <Trash2 size={32} />
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '8px', color: 'var(--text-main)' }}>Delete Product</h3>
+            <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to delete <strong style={{ color: 'var(--text-main)' }}>{deleteModalData.productName}</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setDeleteModalData({ show: false, productId: null, productName: '' })}
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProduct}
+                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#ef4444', border: 'none', color: '#fff', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };
