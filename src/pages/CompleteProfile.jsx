@@ -21,7 +21,9 @@ const CompleteProfile = () => {
     rmcAmpcDoc: '',
     gstNumber: '',
     panNumber: '',
-    foodLicenseDoc: ''
+    foodLicenseDoc: '',
+    qrCodeDoc: '',
+    qrOption: ''
   });
   const [uploading, setUploading] = useState({
     storePic: false,
@@ -29,7 +31,8 @@ const CompleteProfile = () => {
     panDoc: false,
     tradeLicenseDoc: false,
     rmcAmpcDoc: false,
-    foodLicenseDoc: false
+    foodLicenseDoc: false,
+    qrCodeDoc: false
   });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -279,6 +282,17 @@ const CompleteProfile = () => {
               <DocumentUpload label="Trade Licence" field="tradeLicenseDoc" value={formData.tradeLicenseDoc} />
               <DocumentUpload label="RMC/AMPC Licence" field="rmcAmpcDoc" value={formData.rmcAmpcDoc} />
               <DocumentUpload label="Food Licence" field="foodLicenseDoc" value={formData.foodLicenseDoc} />
+              <DocumentUpload label="QR Code Upload" field="qrCodeDoc" value={formData.qrCodeDoc} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '14px', fontWeight: 600, color: '#94a3b8' }}>QR Option / UPI ID</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. 9876543210@upi or Any Option"
+                  value={formData.qrOption}
+                  onChange={e => setFormData({ ...formData, qrOption: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 
