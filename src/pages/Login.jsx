@@ -19,14 +19,14 @@ const Login = () => {
       try {
         const { data } = await api.get('/locations');
         setLocations(data);
-        // Set default location if available
+        // Set default location if available–
         if (data.length > 0) {
           const storedLoc = localStorage.getItem('zudo_seller_location');
           if (storedLoc) {
-            const matchedLoc = data.find(l => 
-              l.name === storedLoc || 
-              l.dbName === storedLoc || 
-              l.name === `zudo-${storedLoc}` || 
+            const matchedLoc = data.find(l =>
+              l.name === storedLoc ||
+              l.dbName === storedLoc ||
+              l.name === `zudo-${storedLoc}` ||
               l.dbName === `zudo-${storedLoc}`
             );
             if (matchedLoc) {
@@ -51,18 +51,18 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     // Clear any existing token to prevent the backend from rejecting the login request due to an expired token
     localStorage.removeItem('zudo_seller_token');
-    
+
     try {
       const locObj = locations.find(l => l.name === selectedLocation);
       const dbLocation = locObj?.dbName || selectedLocation;
 
-      const { data } = await api.post('/sellers/login', { 
-        email: email.trim(), 
+      const { data } = await api.post('/sellers/login', {
+        email: email.trim(),
         password,
-        location: dbLocation 
+        location: dbLocation
       }, {
         headers: { 'x-location': dbLocation }
       });
@@ -71,7 +71,7 @@ const Login = () => {
       // Use the actual location where the backend found the seller, or fallback to dbLocation
       const actualLocation = data.dbName ? data.dbName.replace('zudo-', '') : dbLocation;
       localStorage.setItem('zudo_seller_location', actualLocation);
-      
+
       if (!data.isProfileComplete) {
         navigate('/complete-profile');
       } else {
@@ -85,42 +85,42 @@ const Login = () => {
   };
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      display: 'flex', 
-      alignItems: 'center', 
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
       justifyContent: 'center',
       padding: '20px'
     }}>
-      <div className="glass" style={{ 
-        width: '100%', 
-        maxWidth: '450px', 
+      <div className="glass" style={{
+        width: '100%',
+        maxWidth: '450px',
         padding: '48px',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <img 
-            src="/logo.png" 
-            alt="Logo" 
-            style={{ 
-              width: '80px', 
-              height: '80px', 
+          <img
+            src="/logo.png"
+            alt="Logo"
+            style={{
+              width: '80px',
+              height: '80px',
               objectFit: 'contain',
               margin: '0 auto 24px',
               display: 'block'
-            }} 
+            }}
           />
           <h1 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '8px' }}>Seller Panel</h1>
           <p style={{ color: '#94a3b8' }}>Welcome back! Please login to your account.</p>
         </div>
 
         {error && (
-          <div style={{ 
-            background: 'rgba(239, 68, 68, 0.1)', 
-            border: '1px solid rgba(239, 68, 68, 0.2)', 
-            color: '#ef4444', 
-            padding: '12px', 
-            borderRadius: '12px', 
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            color: '#ef4444',
+            padding: '12px',
+            borderRadius: '12px',
             marginBottom: '24px',
             fontSize: '14px',
             textAlign: 'center'
@@ -132,41 +132,41 @@ const Login = () => {
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ position: 'relative' }}>
             <Mail style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} size={20} />
-            <input 
-              type="email" 
-              placeholder="Email Address" 
-              className="input-field" 
+            <input
+              type="email"
+              placeholder="Email Address"
+              className="input-field"
               style={{ paddingLeft: '48px' }}
-              required 
-              value={email} 
+              required
+              value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
                 setError('');
-              }} 
+              }}
             />
           </div>
           <div style={{ position: 'relative' }}>
             <Lock style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} size={20} />
-            <input 
-              type={showPassword ? "text" : "password"} 
-              placeholder="Password" 
-              className="input-field" 
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              className="input-field"
               style={{ paddingLeft: '48px', paddingRight: '48px' }}
-              required 
-              value={password} 
+              required
+              value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
                 setError('');
-              }} 
+              }}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              style={{ 
-                position: 'absolute', 
-                right: '16px', 
-                top: '50%', 
-                transform: 'translateY(-50%)', 
+              style={{
+                position: 'absolute',
+                right: '16px',
+                top: '50%',
+                transform: 'translateY(-50%)',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
@@ -182,11 +182,11 @@ const Login = () => {
 
           <div style={{ position: 'relative' }}>
             <Store style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} size={20} />
-            <select 
-              className="input-field" 
+            <select
+              className="input-field"
               style={{ paddingLeft: '48px', appearance: 'none' }}
-              required 
-              value={selectedLocation} 
+              required
+              value={selectedLocation}
               onChange={(e) => {
                 setSelectedLocation(e.target.value);
                 setError('');

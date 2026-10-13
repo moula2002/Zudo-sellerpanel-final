@@ -266,11 +266,14 @@ const Orders = () => {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{item.name}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
-                    Qty: {item.quantity} × ₹{item.netPrice !== undefined ? item.netPrice : item.price}
+                    Qty: {item.quantity} × ₹{item.normalPrice !== undefined && item.normalPrice !== null ? item.normalPrice : (item.netPrice !== undefined ? item.netPrice : item.price)} (Seller Payout)
+                    {item.price && item.normalPrice && item.price !== item.normalPrice && (
+                      <span style={{ color: '#22c55e', marginLeft: '6px', fontSize: '11px' }}>• Cust: ₹{item.price}</span>
+                    )}
                   </div>
                 </div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
-                  ₹{item.netTotal !== undefined ? item.netTotal : (item.quantity * item.price)}
+                  ₹{item.normalPrice !== undefined && item.normalPrice !== null ? (item.quantity * item.normalPrice) : (item.netTotal !== undefined ? item.netTotal : (item.quantity * item.price))}
                 </div>
               </div>
             ))}
