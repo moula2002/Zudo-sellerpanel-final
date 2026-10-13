@@ -48,9 +48,9 @@ const BulkUpload = () => {
 
   const downloadTemplate = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
-      + "Name,Category,SubCategory,GST,MOQ,Unit,Description,ImageUrl,PdfUrl,B2C_Size,B2C_Price,B2C_Stock,B2B_Size,B2B_Price,B2B_Stock,Tier1_Qty,Tier1_Price,Tier2_Qty,Tier2_Price\n"
-      + "Example Product,Electronics,Mobile,18,5,pcs,High quality smartphone,https://example.com/image.png,https://example.com/spec.pdf,1kg,10000,50,1kg,9500,50,50,9000,100,8500\n"
-      + "Example Product,Electronics,Mobile,18,5,pcs,High quality smartphone,https://example.com/image.png,https://example.com/spec.pdf,2kg,19000,30,2kg,18000,30,50,17000,100,16500";
+      + "Name,Category,SubCategory,GST,MOQ,Unit,Description,ImageUrl,PdfUrl,B2B_Size,B2B_Price,B2B_Stock,Tier1_Qty,Tier1_Price,Tier2_Qty,Tier2_Price\n"
+      + "Example Product,Electronics,Mobile,18,5,pcs,High quality smartphone,https://example.com/image.png,https://example.com/spec.pdf,1kg,9500,50,50,9000,100,8500\n"
+      + "Example Product,Electronics,Mobile,18,5,pcs,High quality smartphone,https://example.com/image.png,https://example.com/spec.pdf,2kg,18000,30,50,17000,100,16500";
     
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -81,7 +81,7 @@ const BulkUpload = () => {
               <li>Fill in your product details. Mandatory fields: <strong>Name, Category, Unit</strong>.</li>
               <li>Include the <strong>GST</strong> column (use standard brackets: <code>0</code>, <code>5</code>, <code>12</code>, <code>18</code>, <code>28</code>) to set the product tax rate. Defaults to 0 if left empty.</li>
               <li>Use <strong>Description</strong>, <strong>ImageUrl</strong>, and <strong>PdfUrl</strong> for rich product details.</li>
-              <li>To add variants, use <strong>B2C_Size</strong>, <strong>B2C_Price</strong>, <strong>B2C_Stock</strong> for customers, and <strong>B2B_Size</strong>, <strong>B2B_Price</strong>, <strong>B2B_Stock</strong> for wholesale partners.</li>
+              <li>To add variants, use <strong>B2B_Size</strong>, <strong>B2B_Price</strong>, <strong>B2B_Stock</strong> for wholesale products and tiered pricing.</li>
               <li>Upload the file below and wait for the confirmation message.</li>
             </ul>
             <button 

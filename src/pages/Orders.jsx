@@ -182,17 +182,17 @@ const Orders = () => {
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600 }}>{order.userId?.name || 'Guest'}</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600 }}>{order.userId?.name || 'Buyer'}</div>
                   <span style={{
                     fontSize: '10px',
                     padding: '2px 8px',
                     borderRadius: '8px',
-                    background: order.userId?.role === 'b2b' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
-                    color: order.userId?.role === 'b2b' ? '#6366f1' : '#ec4899',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    color: '#6366f1',
                     fontWeight: 700,
                     textTransform: 'uppercase'
                   }}>
-                    {order.userId?.role || 'B2C'}
+                    {order.userId?.role === 'b2b' ? 'B2B Wholesale' : 'Wholesale Order'}
                   </span>
                 </div>
                 <div style={{ fontSize: '12px', color: '#64748b' }}>{order.userId?.email}</div>
@@ -362,10 +362,9 @@ const Orders = () => {
         ? order.items && order.items.some(i => i.returnStatus && i.returnStatus !== 'None')
         : order.orderStatus === statusFilter;
 
-    // Order Type Filter (B2B / B2C)
+    // Order Type Filter
     const matchesType = orderTypeFilter === 'All' ||
-      (orderTypeFilter === 'B2B' && order.userId?.role === 'b2b') ||
-      (orderTypeFilter === 'B2C' && order.userId?.role === 'b2c');
+      (orderTypeFilter === 'B2B' && order.userId?.role === 'b2b');
 
     // Date Filtering
     let matchesDate = true;
@@ -502,7 +501,7 @@ const Orders = () => {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
           {/* Order Type Filter */}
           <div style={{ display: 'flex', gap: '4px', background: 'var(--glass-bg)', padding: '4px', borderRadius: '14px', border: '1px solid var(--border-color)' }}>
-            {['All', 'B2B', 'B2C'].map(type => (
+            {['All', 'B2B'].map(type => (
               <button
                 key={type}
                 onClick={() => setOrderTypeFilter(type)}
@@ -519,7 +518,7 @@ const Orders = () => {
                   whiteSpace: 'nowrap'
                 }}
               >
-                {type}
+                {type === 'All' ? 'All Orders' : 'B2B Orders'}
               </button>
             ))}
           </div>
@@ -588,17 +587,17 @@ const Orders = () => {
                 </td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{order.userId?.name || 'Guest'}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-main)' }}>{order.userId?.name || 'Buyer'}</div>
                     <span style={{
                       fontSize: '9px',
                       padding: '2px 6px',
                       borderRadius: '6px',
-                      background: order.userId?.role === 'b2b' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(236, 72, 153, 0.1)',
-                      color: order.userId?.role === 'b2b' ? '#6366f1' : '#ec4899',
+                      background: 'rgba(99, 102, 241, 0.1)',
+                      color: '#6366f1',
                       fontWeight: 800,
                       textTransform: 'uppercase'
                     }}>
-                      {order.userId?.role || 'B2C'}
+                      {order.userId?.role === 'b2b' ? 'B2B' : 'Wholesale'}
                     </span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{order.userId?.phone || order.shippingAddress?.phone}</div>
