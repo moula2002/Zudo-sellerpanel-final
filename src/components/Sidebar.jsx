@@ -23,7 +23,7 @@ const SidebarItem = ({ to, icon: Icon, label }) => {
   return (
     <NavLink 
       to={to} 
-      end={to === '/'} // Ensure exact match for root
+      end={to === '/' || to === '/products'} // Ensure exact match for root and products
       style={({ isActive }) => ({
         display: 'flex',
         alignItems: 'center',
@@ -154,6 +154,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           <SidebarItem to="/orders" icon={ShoppingBag} label="Orders" />
           <SidebarItem to="/categories" icon={Layers} label="Category" />
           <SidebarItem to="/subcategories" icon={Layers} label="Sub Category" />
+          <SidebarItem to="/products" icon={Package} label="Products" />
           <SidebarItem to="/products/bulk" icon={FileSpreadsheet} label="Bulk Upload" />
           <SidebarItem to="/invoices" icon={FileText} label="Invoices" />
           <SidebarItem to="/returns" icon={RotateCcw} label="Returns" />
