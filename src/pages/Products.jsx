@@ -9,21 +9,17 @@ const ProductDetailModal = ({ product, onClose }) => {
 
   const gstRate = product.gstRate || product.gstPercent || 0;
   
-  // Base seller prices
-  const sellerRetailPrice = product.sellerPrice !== undefined && product.sellerPrice !== null
-    ? product.sellerPrice
-    : (product.b2c && product.b2c.length > 0 && product.b2c[0].sellerPrice !== undefined ? product.b2c[0].sellerPrice : product.price || 0);
-
-  const sellerB2bPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
+  // Base B2B wholesale prices
+  const sellerPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
     ? product.sellerB2bPrice
-    : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined ? product.b2b[0].sellerPrice : product.b2bPrice || 0);
+    : (product.sellerPrice !== undefined && product.sellerPrice !== null
+        ? product.sellerPrice
+        : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
+            ? product.b2b[0].sellerPrice
+            : (product.b2bPrice || product.price || 0)));
 
-  // Customer prices
-  const customerRetailPrice = product.price || (product.b2c && product.b2c.length > 0 ? product.b2c[0].price : 0);
-  const customerB2bPrice = product.b2bPrice || (product.b2b && product.b2b.length > 0 ? product.b2b[0].price : 0);
-
-  const regularCustomerTotalWithGst = customerRetailPrice + (customerRetailPrice * gstRate) / 100;
-  const b2bCustomerTotalWithGst = customerB2bPrice + (customerB2bPrice * gstRate) / 100;
+  const customerPrice = product.b2bPrice || (product.b2b && product.b2b.length > 0 ? product.b2b[0].price : product.price || 0);
+  const customerTotalWithGst = customerPrice + (customerPrice * gstRate) / 100;
 
   const commType = product.commissionType || 'flat';
   const commVal = product.commissionValue !== undefined && product.commissionValue !== null ? product.commissionValue : 0;
@@ -143,7 +139,7 @@ const ProductDetailModal = ({ product, onClose }) => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
               <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>SELLER PRICE (NET)</div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-main)' }}>₹{sellerRetailPrice}</div>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-main)' }}>₹{sellerPrice}</div>
                 <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Your Payout</div>
               </div>
 
@@ -155,9 +151,9 @@ const ProductDetailModal = ({ product, onClose }) => {
 
               <div style={{ padding: '14px', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
                 <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 700, marginBottom: '4px' }}>CUSTOMER PRICE</div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: '#22c55e' }}>₹{customerRetailPrice}</div>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: '#22c55e' }}>₹{customerPrice}</div>
                 <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
-                  Incl. GST: ₹{regularCustomerTotalWithGst.toFixed(2)}
+                  Incl. GST: ₹{customerTotalWithGst.toFixed(2)}
                 </div>
               </div>
 
@@ -170,33 +166,33 @@ const ProductDetailModal = ({ product, onClose }) => {
               </div>
             </div>
 
-            {/* B2B Wholesale Info */}
-            {(sellerB2bPrice > 0 || customerB2bPrice > 0) && (
-              <div style={{ padding: '14px', background: 'rgba(236, 72, 153, 0.05)', borderRadius: '16px', border: '1px solid rgba(236, 72, 153, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#ec4899', fontWeight: 700 }}>B2B WHOLESALE PRICING</div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
-                    Seller Payout: <strong style={{ color: '#e2e8f0' }}>₹{sellerB2bPrice}</strong> + Commission <strong style={{ color: '#f59e0b' }}>{commLabel}</strong>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '18px', fontWeight: 900, color: '#ec4899' }}>₹{customerB2bPrice} Base</div>
-                  <div style={{ fontSize: '11px', color: '#ec4899' }}>+ {gstRate}% GST (₹{b2bCustomerTotalWithGst.toFixed(2)} Total)</div>
+            {/* B2B Size Variants Table if any */}
+            {product.b2b && product.b2b.length > 0 && (
+              <div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>B2B SIZE VARIANTS</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {product.b2b.map((v, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', fontSize: '13px' }}>
+                      <span style={{ fontWeight: 600 }}>{v.packetSize}</span>
+                      <span style={{ color: '#94a3b8' }}>Seller: ₹{v.sellerPrice !== undefined ? v.sellerPrice : v.price}</span>
+                      <span style={{ color: '#ec4899', fontWeight: 700 }}>Customer: ₹{v.price}</span>
+                      <span style={{ color: '#64748b' }}>Stock: {v.stock}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* B2C Variants Table if any */}
-            {product.b2c && product.b2c.length > 0 && (
+            {/* B2B Tiered Pricing if any */}
+            {product.priceTiers && product.priceTiers.length > 0 && (
               <div>
-                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>B2C SIZE VARIANTS</div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>B2B TIERED PRICING</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {product.b2c.map((v, i) => (
+                  {product.priceTiers.map((t, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', fontSize: '13px' }}>
-                      <span style={{ fontWeight: 600 }}>{v.packetSize}</span>
-                      <span style={{ color: '#94a3b8' }}>Seller: ₹{v.sellerPrice !== undefined ? v.sellerPrice : v.price}</span>
-                      <span style={{ color: '#22c55e', fontWeight: 700 }}>Customer: ₹{v.price}</span>
-                      <span style={{ color: '#64748b' }}>Stock: {v.stock}</span>
+                      <span style={{ fontWeight: 600 }}>Min Qty: {t.minQty}</span>
+                      <span style={{ color: '#94a3b8' }}>Seller: ₹{t.sellerPrice !== undefined ? t.sellerPrice : t.price}</span>
+                      <span style={{ color: '#ec4899', fontWeight: 700 }}>Customer: ₹{t.price}</span>
                     </div>
                   ))}
                 </div>
@@ -303,7 +299,7 @@ const Products = () => {
       }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-main)' }}>Products</h1>
-          <p style={{ color: 'var(--text-dim)' }}>Manage your product selling prices, commissions, and customer pricing.</p>
+          <p style={{ color: 'var(--text-dim)' }}>Manage your wholesale selling prices, platform commissions, and customer pricing.</p>
         </div>
         <button 
           onClick={() => navigate('/products/add')}
@@ -317,7 +313,7 @@ const Products = () => {
 
       <div style={{ 
         display: 'flex', 
-        flexDirection: 'column',
+        flexDirection: 'column', 
         gap: '16px', 
         marginBottom: '24px',
         background: 'rgba(255, 255, 255, 0.02)',
@@ -331,7 +327,7 @@ const Products = () => {
             <input 
               type="text" 
               placeholder="Search products..." 
-              className="input-field"
+              className="input-field" 
               style={{ paddingLeft: '48px' }}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -421,11 +417,15 @@ const Products = () => {
                 </td>
               </tr>
             ) : filteredProducts.map((product) => {
-              const sellerPrice = product.sellerPrice !== undefined && product.sellerPrice !== null
-                ? product.sellerPrice
-                : (product.b2c && product.b2c.length > 0 && product.b2c[0].sellerPrice !== undefined ? product.b2c[0].sellerPrice : (product.price || 0));
+              const sellerPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
+                ? product.sellerB2bPrice
+                : (product.sellerPrice !== undefined && product.sellerPrice !== null
+                    ? product.sellerPrice
+                    : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
+                        ? product.b2b[0].sellerPrice
+                        : (product.b2bPrice || product.price || 0)));
 
-              const customerPrice = product.price || (product.b2c && product.b2c.length > 0 ? product.b2c[0].price : 0);
+              const customerPrice = product.b2bPrice || (product.b2b && product.b2b.length > 0 ? product.b2b[0].price : product.price || 0);
               const displayGstRate = product.gstRate || product.gstPercent || 0;
               const customerPriceWithGst = customerPrice + (customerPrice * displayGstRate) / 100;
 
@@ -457,7 +457,7 @@ const Products = () => {
                   </td>
                   <td style={{ padding: '16px 20px' }}>
                     <div style={{ fontSize: '15px', fontWeight: 700, color: '#e2e8f0' }}>₹{sellerPrice}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>Seller Base</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>Seller Payout</div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
                     <span style={{ fontSize: '12px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '4px 8px', borderRadius: '6px', fontWeight: 700 }}>
@@ -518,11 +518,15 @@ const Products = () => {
             No products found.
           </div>
         ) : filteredProducts.map((product) => {
-          const sellerPrice = product.sellerPrice !== undefined && product.sellerPrice !== null
-            ? product.sellerPrice
-            : (product.b2c && product.b2c.length > 0 && product.b2c[0].sellerPrice !== undefined ? product.b2c[0].sellerPrice : (product.price || 0));
+          const sellerPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
+            ? product.sellerB2bPrice
+            : (product.sellerPrice !== undefined && product.sellerPrice !== null
+                ? product.sellerPrice
+                : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
+                    ? product.b2b[0].sellerPrice
+                    : (product.b2bPrice || product.price || 0)));
 
-          const customerPrice = product.price || (product.b2c && product.b2c.length > 0 ? product.b2c[0].price : 0);
+          const customerPrice = product.b2bPrice || (product.b2b && product.b2b.length > 0 ? product.b2b[0].price : product.price || 0);
           const commType = product.commissionType || 'flat';
           const commVal = product.commissionValue !== undefined && product.commissionValue !== null ? product.commissionValue : 0;
           const commLabel = commType === 'flat' ? `₹${commVal}/unit` : `${commVal}%`;

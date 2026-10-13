@@ -27,9 +27,7 @@ const EditProduct = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    sellerPrice: '',
     sellerB2bPrice: '',
-    price: '',
     b2bPrice: '',
     commissionType: 'flat',
     commissionValue: '2',
@@ -49,7 +47,6 @@ const EditProduct = () => {
   const [commissions, setCommissions] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [b2bVariants, setB2bVariants] = useState([]);
-  const [b2cVariants, setB2cVariants] = useState([]);
   const [previews, setPreviews] = useState({ image: null });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -68,14 +65,12 @@ const EditProduct = () => {
         setCommissions(commRes.data || []);
         const p = productRes.data;
 
-        // Use stored sellerPrice or fallback to price for legacy products
-        const baseSellerPrice = p.sellerPrice !== undefined && p.sellerPrice !== null
-          ? String(p.sellerPrice)
-          : String(p.price || '');
-
+        // Resolve base wholesale selling price
         const baseSellerB2bPrice = p.sellerB2bPrice !== undefined && p.sellerB2bPrice !== null
           ? String(p.sellerB2bPrice)
-          : String(p.b2bPrice || '');
+          : (p.sellerPrice !== undefined && p.sellerPrice !== null
+              ? String(p.sellerPrice)
+              : String(p.b2bPrice || p.price || ''));
 
         const commType = p.commissionType || 'flat';
         const commVal = p.commissionValue !== undefined && p.commissionValue !== null
@@ -85,10 +80,8 @@ const EditProduct = () => {
         setFormData({
           name: p.name || '',
           description: p.description || '',
-          sellerPrice: baseSellerPrice,
           sellerB2bPrice: baseSellerB2bPrice,
-          price: p.price ? String(p.price) : '',
-          b2bPrice: p.b2bPrice ? String(p.b2bPrice) : '',
+          b2bPrice: p.b2bPrice ? String(p.b2bPrice) : (p.price ? String(p.price) : ''),
           commissionType: commType,
           commissionValue: commVal,
           moq: p.moq ? String(p.moq) : '1',
@@ -125,20 +118,7 @@ const EditProduct = () => {
           };
         });
 
-        const parsedB2c = (p.b2c || []).map(v => {
-          const parsed = parsePacketSize(v.packetSize);
-          const vSeller = v.sellerPrice !== undefined && v.sellerPrice !== null ? v.sellerPrice : (v.price || '');
-          return {
-            packetSizeVal: parsed.val,
-            packetSizeUnit: parsed.unit,
-            sellerPrice: vSeller ? String(vSeller) : '',
-            price: v.price ? String(v.price) : '',
-            stock: v.stock !== undefined ? String(v.stock) : ''
-          };
-        });
-
         setB2bVariants(parsedB2b);
-        setB2cVariants(parsedB2c);
         if (p.imageUrl) {
           setPreviews(prev => ({ ...prev, image: getImageUrl(p.imageUrl) }));
         }
@@ -172,14 +152,6 @@ const EditProduct = () => {
     }
   };
 
-  const handleAddB2c = () => setB2cVariants([...b2cVariants, { packetSizeVal: '', packetSizeUnit: formData.unit || 'kg', sellerPrice: '', price: '', stock: '' }]);
-  const handleRemoveB2c = (index) => setB2cVariants(b2cVariants.filter((_, i) => i !== index));
-  const handleB2cChange = (index, field, value) => {
-    const newArr = [...b2cVariants];
-    newArr[index][field] = value;
-    setB2cVariants(newArr);
-  };
-
   const handleAddB2b = () => setB2bVariants([...b2bVariants, { packetSizeVal: '', packetSizeUnit: formData.unit || 'kg', sellerPrice: '', price: '', stock: '' }]);
   const handleRemoveB2b = (index) => setB2bVariants(b2bVariants.filter((_, i) => i !== index));
   const handleB2bChange = (index, field, value) => {
@@ -188,23 +160,15 @@ const EditProduct = () => {
     setB2bVariants(newArr);
   };
 
-  // Calculations
-  const sellerB2cVal = parseFloat(formData.sellerPrice) || 0;
+  // Calculations for wholesale B2B pricing
   const sellerB2bVal = parseFloat(formData.sellerB2bPrice) || 0;
   const commType = formData.commissionType || 'flat';
   const commVal = parseFloat(formData.commissionValue) || 0;
 
-  const b2cCalc = calculateCustomerPrice(sellerB2cVal, commType, commVal);
   const b2bCalc = calculateCustomerPrice(sellerB2bVal, commType, commVal);
 
   const selectedCategory = categories.find(c => String(c._id) === String(formData.categoryId));
   const gstPercentNum = Number(formData.gstPercent) || 0;
-
-  const regularCustomerBase = b2cCalc.customerPrice * calcQuantity;
-  const regularSellerBase = sellerB2cVal * calcQuantity;
-  const regularCommissionTotal = b2cCalc.commissionAmount * calcQuantity;
-  const regularGstAmount = (regularCustomerBase * gstPercentNum) / 100;
-  const regularPriceTotal = regularCustomerBase + regularGstAmount;
 
   const b2bCustomerBase = b2bCalc.customerPrice * calcQuantity;
   const b2bSellerBase = sellerB2bVal * calcQuantity;
@@ -228,19 +192,6 @@ const EditProduct = () => {
         imageUrl = `${IMAGE_BASE_URL}${imgRes.url}`;
       }
 
-      const formattedB2c = b2cVariants
-        .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
-        .map(v => {
-          const sPrice = parseFloat(v.sellerPrice || v.price) || 0;
-          const vCalc = calculateCustomerPrice(sPrice, commType, commVal);
-          return {
-            packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
-            sellerPrice: sPrice,
-            price: vCalc.customerPrice,
-            stock: parseInt(v.stock) || 0
-          };
-        });
-
       const formattedB2b = b2bVariants
         .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
         .map(v => {
@@ -256,15 +207,15 @@ const EditProduct = () => {
 
       await api.put(`/products/${id}`, {
         ...formData,
-        sellerPrice: sellerB2cVal,
-        price: b2cCalc.customerPrice,
         sellerB2bPrice: sellerB2bVal,
         b2bPrice: b2bCalc.customerPrice,
+        sellerPrice: sellerB2bVal,
+        price: b2bCalc.customerPrice,
         commissionType: commType,
         commissionValue: commVal,
-        commissionAmount: b2cCalc.commissionAmount,
+        commissionAmount: b2bCalc.commissionAmount,
         b2b: formattedB2b,
-        b2c: formattedB2c,
+        b2c: [],
         imageUrl,
         pdfUrl: formData.pdfUrl
       });
@@ -311,10 +262,10 @@ const EditProduct = () => {
           </button>
           <div>
             <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
-              Edit Product
+              Edit B2B Product
             </h1>
             <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginTop: '4px' }}>
-              Manage seller price, platform commission, and customer pricing
+              Manage wholesale selling price, platform commission, and customer pricing
             </p>
           </div>
         </div>
@@ -373,7 +324,7 @@ const EditProduct = () => {
                   <div style={{ width: '35px', height: '35px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e' }}>
                     <IndianRupee size={18} />
                   </div>
-                  <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Seller Pricing & Commission</h2>
+                  <h2 style={{ fontSize: '18px', fontWeight: 700 }}>B2B Pricing & Commission</h2>
                 </div>
                 {matchedAdminRule && (
                   <span style={{ fontSize: '11px', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', padding: '4px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
@@ -384,26 +335,7 @@ const EditProduct = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Seller Price (B2C Base ₹) *</label>
-                  <div style={{ position: 'relative' }}>
-                    <IndianRupee size={16} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                    <input
-                      type="number"
-                      className="input-field"
-                      style={{ paddingLeft: '42px' }}
-                      placeholder="e.g. 3000"
-                      value={formData.sellerPrice}
-                      onChange={e => setFormData({ ...formData, sellerPrice: e.target.value })}
-                      required
-                      min="0"
-                      step="0.01"
-                    />
-                  </div>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>Seller net payout amount</span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Seller Price (B2B Base ₹) *</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Selling Price (₹) *</label>
                   <div style={{ position: 'relative' }}>
                     <IndianRupee size={16} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
@@ -418,7 +350,7 @@ const EditProduct = () => {
                       step="0.01"
                     />
                   </div>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>Wholesale net payout amount</span>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>Your net wholesale payout price</span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -528,7 +460,7 @@ const EditProduct = () => {
               </div>
 
               {/* Dynamic Pricing Breakdown Card */}
-              {(sellerB2cVal > 0 || sellerB2bVal > 0) && (
+              {sellerB2bVal > 0 && (
                 <div style={{
                   marginTop: '25px',
                   padding: '24px',
@@ -545,7 +477,7 @@ const EditProduct = () => {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>
-                        Simulate Weight/Quantity:
+                        Simulate Quantity:
                       </span>
                       <select
                         value={calcQuantity}
@@ -570,86 +502,19 @@ const EditProduct = () => {
                     </div>
                   </div>
 
-                  {sellerB2cVal > 0 && (
-                    <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', marginBottom: '10px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        <span>B2C Retail ({calcQuantity} {formData.unit}): Seller Price ₹{regularSellerBase.toFixed(2)} + Commission ₹{regularCommissionTotal.toFixed(2)}</span>
-                        <span style={{ fontWeight: 700, color: '#22c55e' }}>
-                          Customer Display Price: ₹{regularCustomerBase.toFixed(2)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>
-                        Incl. {gstPercentNum}% GST breakdown: ₹{(regularCustomerBase / (1 + gstPercentNum / 100)).toFixed(2)} Base + ₹{(regularCustomerBase - (regularCustomerBase / (1 + gstPercentNum / 100))).toFixed(2)} GST
-                      </div>
+                  <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap' }}>
+                      <span>B2B Wholesale ({calcQuantity} {formData.unit}): Seller Price ₹{b2bSellerBase.toFixed(2)} + Commission ₹{b2bCommissionTotal.toFixed(2)}</span>
+                      <span style={{ fontWeight: 700, color: '#ec4899' }}>
+                        Customer Price: ₹{b2bCustomerBase.toFixed(2)}
+                      </span>
                     </div>
-                  )}
-
-                  {sellerB2bVal > 0 && (
-                    <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        <span>B2B Wholesale ({calcQuantity} {formData.unit}): Seller Price ₹{b2bSellerBase.toFixed(2)} + Commission ₹{b2bCommissionTotal.toFixed(2)}</span>
-                        <span style={{ fontWeight: 700, color: '#ec4899' }}>
-                          Customer Base Price: ₹{b2bCustomerBase.toFixed(2)}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>
-                        With {gstPercentNum}% GST (+₹{b2bGstAmount.toFixed(2)}): <span style={{ color: '#e2e8f0', fontWeight: 600 }}>₹{b2bPriceTotal.toFixed(2)} Total</span>
-                      </div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>
+                      With {gstPercentNum}% GST (+₹{b2bGstAmount.toFixed(2)}): <span style={{ color: '#e2e8f0', fontWeight: 600 }}>₹{b2bPriceTotal.toFixed(2)} Total</span>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
-
-              {/* B2C Size Variants Section */}
-              <div style={{ marginTop: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '30px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h4 style={{ fontSize: '16px', fontWeight: 600, color: '#e2e8f0' }}>B2C Size Variants</h4>
-                  <button type="button" onClick={handleAddB2c} style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Plus size={16} /> Add B2C Variant
-                  </button>
-                </div>
-                {b2cVariants.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    {b2cVariants.map((variant, index) => {
-                      const vSeller = parseFloat(variant.sellerPrice) || 0;
-                      const vCalc = calculateCustomerPrice(vSeller, commType, commVal);
-                      return (
-                        <div key={index} style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)', flexWrap: 'wrap' }}>
-                          <div style={{ flex: 1.2, minWidth: '100px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Size Value *</label>
-                            <input type="number" className="input-field" value={variant.packetSizeVal} onChange={(e) => handleB2cChange(index, 'packetSizeVal', e.target.value)} placeholder="e.g. 500" required min="0" step="0.01" />
-                          </div>
-                          <div style={{ flex: 1, minWidth: '90px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Unit *</label>
-                            <select className="input-field" value={variant.packetSizeUnit} onChange={(e) => handleB2cChange(index, 'packetSizeUnit', e.target.value)} required style={{ height: '48px', cursor: 'pointer' }}>
-                              <option value="g">g</option>
-                              <option value="kg">kg</option>
-                              <option value="ltr">ltr</option>
-                              <option value="ml">ml</option>
-                              <option value="pcs">pcs</option>
-                            </select>
-                          </div>
-                          <div style={{ flex: 1.5, minWidth: '130px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Seller Price (₹) *</label>
-                            <input type="number" className="input-field" value={variant.sellerPrice} onChange={(e) => handleB2cChange(index, 'sellerPrice', e.target.value)} placeholder="Seller Net Price" min="0" step="0.01" required />
-                          </div>
-                          <div style={{ flex: 1.5, minWidth: '140px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#22c55e', marginBottom: '6px', fontWeight: 600 }}>Customer Price (₹)</label>
-                            <input type="text" className="input-field" value={vSeller > 0 ? `₹${vCalc.customerPrice.toFixed(2)} (+₹${vCalc.commissionAmount.toFixed(2)})` : '₹0.00'} disabled style={{ background: 'rgba(34, 197, 94, 0.05)', color: '#22c55e', fontWeight: 700 }} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: '80px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Stock *</label>
-                            <input type="number" className="input-field" value={variant.stock} onChange={(e) => handleB2cChange(index, 'stock', e.target.value)} placeholder="Stock" min="0" required />
-                          </div>
-                          <button type="button" onClick={() => handleRemoveB2c(index)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                            <Trash2 size={20} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
 
               {/* B2B Size Variants Section */}
               <div style={{ marginTop: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '30px' }}>
@@ -855,7 +720,7 @@ const EditProduct = () => {
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Save size={18} />
-                <span>Update Product</span>
+                <span>Update B2B Product</span>
               </div>
             )}
           </button>
