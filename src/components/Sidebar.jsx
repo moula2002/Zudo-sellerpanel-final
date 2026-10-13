@@ -23,7 +23,7 @@ const SidebarItem = ({ to, icon: Icon, label }) => {
   return (
     <NavLink 
       to={to} 
-      end={to === '/' || to === '/products'} // Ensure exact match for root and products
+      end={to === '/'} // Ensure exact match for root
       style={({ isActive }) => ({
         display: 'flex',
         alignItems: 'center',
@@ -151,15 +151,14 @@ const Sidebar = ({ isOpen, onClose }) => {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
           <SidebarItem to="/" icon={LayoutDashboard} label="Dashboard" />
-          <SidebarItem to="/categories" icon={Layers} label="Categories" />
-          <SidebarItem to="/subcategories" icon={Layers} label="SubCategories" />
-          <SidebarItem to="/products" icon={Package} label="Products" />
-          <SidebarItem to="/products/bulk" icon={FileSpreadsheet} label="Bulk Upload" />
-          <SidebarItem to="/feed-upload" icon={Rss} label="Feed Upload" />
           <SidebarItem to="/orders" icon={ShoppingBag} label="Orders" />
-          <SidebarItem to="/returns" icon={RotateCcw} label="Returns" />
+          <SidebarItem to="/categories" icon={Layers} label="Category" />
+          <SidebarItem to="/subcategories" icon={Layers} label="Sub Category" />
+          <SidebarItem to="/products/bulk" icon={FileSpreadsheet} label="Bulk Upload" />
           <SidebarItem to="/invoices" icon={FileText} label="Invoices" />
-          <SidebarItem to="/pickups" icon={Truck} label="Pickups" />
+          <SidebarItem to="/returns" icon={RotateCcw} label="Returns" />
+          <SidebarItem to="/pickups" icon={Truck} label="Pickup" />
+          <SidebarItem to="/feed-upload" icon={Rss} label="Feed Upload" />
           <SidebarItem to="/settings" icon={Settings} label="Profile Settings" />
           
           <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
