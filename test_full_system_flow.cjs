@@ -86,17 +86,17 @@ console.log(`  [PASS] Customer Paid: ₹${customerPayTotal} | Seller Invoiced: �
 console.log('\nCHECK 4: Seller Panel Components...');
 const addProductCode = fs.readFileSync(path.resolve('src', 'pages', 'AddProduct.jsx'), 'utf8');
 assert(addProductCode.includes('name="sellerB2bPrice"'), 'AddProduct has sellerB2bPrice input');
-assert(addProductCode.includes('Selling Price (₹) *'), 'AddProduct has Selling Price (₹) * label');
-assert(addProductCode.includes('name="commissionValue"'), 'AddProduct has commissionValue input');
+assert(addProductCode.includes('Base Price (₹) *'), 'AddProduct has Base Price (₹) * label');
+assert(!addProductCode.includes('name="commissionValue"'), 'AddProduct commissionValue input removed as expected');
 assert(addProductCode.includes('calculateCustomerPrice'), 'AddProduct uses calculateCustomerPrice');
-assert(addProductCode.includes('Live Pricing & Customer Display Breakdown'), 'AddProduct has live pricing card');
-console.log('  [PASS] AddProduct.jsx has B2B selling price, commission settings, and live breakdown');
+assert(addProductCode.includes('Live Pricing Breakdown'), 'AddProduct has live pricing card');
+console.log('  [PASS] AddProduct.jsx has B2B base price, GST breakdown, and admin-synced commission');
 
 const editProductCode = fs.readFileSync(path.resolve('src', 'pages', 'EditProduct.jsx'), 'utf8');
 assert(editProductCode.includes('sellerB2bPrice: baseSellerB2bPrice'), 'EditProduct loads sellerB2bPrice');
-assert(editProductCode.includes('Selling Price (₹) *'), 'EditProduct has Selling Price (₹) * label');
+assert(editProductCode.includes('Base Price (₹) *'), 'EditProduct has Base Price (₹) * label');
 assert(editProductCode.includes('calculateCustomerPrice'), 'EditProduct calculates customer price');
-assert(editProductCode.includes('Dynamic Pricing Simulator & Commission Breakdown'), 'EditProduct has live pricing breakdown');
+assert(editProductCode.includes('Live Pricing Breakdown'), 'EditProduct has live pricing breakdown');
 console.log('  [PASS] EditProduct.jsx loads base wholesale seller price and prevents double markup');
 
 const productsCode = fs.readFileSync(path.resolve('src', 'pages', 'Products.jsx'), 'utf8');

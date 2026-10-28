@@ -471,9 +471,23 @@ const Products = () => {
                     </div>
                   </td>
                   <td style={{ padding: '16px 20px', fontSize: '13px' }}>
-                    <span style={{ color: product.stock < 10 ? '#ef4444' : '#22c55e', fontWeight: 600 }}>
+                    <div style={{ color: (product.stockStatus === 'Out of Stock' || product.stock < 10) ? '#ef4444' : '#22c55e', fontWeight: 600 }}>
                       {product.stock} {product.unit || 'pcs'}
-                    </span>
+                    </div>
+                    {product.stockStatus && (
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontWeight: 700,
+                        display: 'inline-block',
+                        marginTop: '4px',
+                        background: product.stockStatus === 'Out of Stock' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                        color: product.stockStatus === 'Out of Stock' ? '#ef4444' : '#22c55e'
+                      }}>
+                        {product.stockStatus}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '16px 20px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import api, { uploadApi, IMAGE_BASE_URL, getImageUrl } from '../utils/api';
-import { ShoppingBag, Search, Filter, MoreHorizontal, Calendar, User, MapPin, ExternalLink, Clock, CheckCircle, Truck, XCircle, RefreshCcw, Download, FileText, Printer, Check, X , Upload, QrCode, Loader2 } from 'lucide-react';
+import { ShoppingBag, Search, Filter, MoreHorizontal, Calendar, User, MapPin, ExternalLink, Clock, CheckCircle, Truck, XCircle, RefreshCcw, Download, FileText, Printer, Check, X, Upload, QrCode, Loader2 } from 'lucide-react';
 import Layout from '../components/Layout';
 
 const StatusBadge = ({ status }) => {
@@ -119,14 +119,14 @@ const Orders = () => {
         setUploadingQr(false);
       }
     };
-    
+
     const handleSaveQrOption = async () => {
       try {
         await api.put(`/orders/${order._id}/qrcode`, { qrCodeDoc, qrOption });
         order.qrCodeDoc = qrCodeDoc;
         order.qrOption = qrOption;
         alert('QR Option saved!');
-      } catch(e) {
+      } catch (e) {
         alert('Failed to save QR option');
       }
     };
@@ -312,17 +312,17 @@ const Orders = () => {
                 </>
               )}
             </div>
-            
+
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input 
-                type="text" 
-                className="input-field" 
-                placeholder="QR Option / UPI ID (e.g. 9876543210@upi)" 
+              <input
+                type="text"
+                className="input-field"
+                placeholder="QR Option / UPI ID (e.g. 9876543210@upi)"
                 value={qrOption}
                 onChange={e => setQrOption(e.target.value)}
                 style={{ flex: 1, padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
               />
-              <button 
+              <button
                 onClick={handleSaveQrOption}
                 style={{ padding: '0 16px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 }}
               >
@@ -356,8 +356,8 @@ const Orders = () => {
     const customerName = order.userId?.name || 'Guest';
     const matchesSearch = orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customerName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'All' 
-      ? true 
+    const matchesStatus = statusFilter === 'All'
+      ? true
       : statusFilter === 'Returns'
         ? order.items && order.items.some(i => i.returnStatus && i.returnStatus !== 'None')
         : order.orderStatus === statusFilter;

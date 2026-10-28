@@ -78,7 +78,7 @@ const BulkUpload = () => {
             </h3>
             <ul style={{ color: 'var(--text-dim)', fontSize: '14px', lineHeight: '1.8', paddingLeft: '20px' }}>
               <li>Download the sample template to see the required column headers.</li>
-              <li>Fill in your product details. Mandatory fields: <strong>Name, Category, Unit</strong>.</li>
+              <li>Fill in your product details. Mandatory fields: <strong>Name, Category, Unit</strong> (e.g. pcs, kg, g, ltr, ml, bag).</li>
               <li>Include the <strong>GST</strong> column (use standard brackets: <code>0</code>, <code>5</code>, <code>12</code>, <code>18</code>, <code>28</code>) to set the product tax rate. Defaults to 0 if left empty.</li>
               <li>Use <strong>Description</strong>, <strong>ImageUrl</strong>, and <strong>PdfUrl</strong> for rich product details.</li>
               <li>To add variants, use <strong>B2B_Size</strong>, <strong>B2B_Price</strong>, <strong>B2B_Stock</strong> for wholesale products and tiered pricing.</li>

@@ -28,7 +28,9 @@ const AddProduct = () => {
     unit: 'pcs',
     sellerId: '',
     stock: 0,
+    stockStatus: 'Available',
     sku: '',
+    hsn: '',
     description: '',
     image: null,
     pdf: null
@@ -207,7 +209,7 @@ const AddProduct = () => {
         </button>
         <div>
           <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>Add New B2B Product</h2>
-          <p style={{ fontSize: '14px', color: 'var(--text-dim)' }}>Set your wholesale selling price, platform commission, and inventory details</p>
+          <p style={{ fontSize: '14px', color: 'var(--text-dim)' }}>Set your wholesale selling price and inventory details</p>
         </div>
       </div>
 
@@ -274,23 +276,18 @@ const AddProduct = () => {
 
         <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.05)' }} />
 
-        {/* Seller Pricing & Commission Configuration */}
+        {/* Seller Pricing Configuration */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <IndianRupee size={18} color="#22c55e" /> B2B Pricing & Commission
+              <IndianRupee size={18} color="#22c55e" /> B2B Pricing
             </h3>
-            {matchedAdminRule && (
-              <span style={{ fontSize: '11px', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', padding: '4px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                <Sparkles size={12} /> Auto-synced with Admin Category Rule ({matchedAdminRule.commissionType === 'flat' ? `₹${matchedAdminRule.commissionValue}/unit` : `${matchedAdminRule.commissionValue}%`})
-              </span>
-            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600 }}>
-                Selling Price (₹) *
+                Base Price (₹) *
               </label>
               <input 
                 type="number" 
@@ -306,31 +303,7 @@ const AddProduct = () => {
               <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>Your net wholesale payout price</span>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600 }}>Commission Type</label>
-              <select name="commissionType" className="input-field" value={formData.commissionType} onChange={handleInputChange}>
-                <option value="flat">Flat Amount (₹ per unit)</option>
-                <option value="percentage">Percentage (%)</option>
-              </select>
-            </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600 }}>
-                Commission Value ({formData.commissionType === 'flat' ? '₹ per unit' : '%'}) *
-              </label>
-              <input 
-                type="number" 
-                name="commissionValue" 
-                className="input-field" 
-                value={formData.commissionValue} 
-                onChange={handleInputChange} 
-                required 
-                min="0" 
-                step="0.01" 
-                placeholder="e.g. 2" 
-              />
-              <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>Platform fee per unit</span>
-            </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '8px', fontWeight: 500 }}>Unit Type *</label>
@@ -340,6 +313,7 @@ const AddProduct = () => {
                 <option value="kg">kg</option>
                 <option value="ltr">ltr</option>
                 <option value="ml">ml</option>
+                <option value="bag">bag</option>
               </select>
             </div>
 
@@ -362,40 +336,47 @@ const AddProduct = () => {
               <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '8px', fontWeight: 500 }}>SKU (Optional)</label>
               <input type="text" name="sku" className="input-field" value={formData.sku} onChange={handleInputChange} placeholder="SKU-XYZ-001" />
             </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '8px', fontWeight: 500 }}>HSN Code</label>
+              <input type="text" name="hsn" className="input-field" value={formData.hsn} onChange={handleInputChange} placeholder="e.g. 25010090" />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '8px', fontWeight: 500 }}>Stock Status</label>
+              <select name="stockStatus" className="input-field" value={formData.stockStatus} onChange={handleInputChange}>
+                <option value="Available">Available</option>
+                <option value="Out of Stock">Out of Stock</option>
+              </select>
+            </div>
           </div>
 
-          {/* Pricing Breakdown & Customer Display Preview Card */}
+          {/* Pricing Breakdown Preview Card */}
           {sellerB2bVal > 0 && (
             <div style={{
               marginTop: '20px',
               padding: '20px',
               borderRadius: '16px',
-              background: 'rgba(99, 102, 241, 0.04)',
-              border: '1px solid rgba(99, 102, 241, 0.15)'
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px solid rgba(99, 102, 241, 0.25)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', color: '#818cf8', fontWeight: 700, fontSize: '14px' }}>
-                <Info size={16} /> Live Pricing & Customer Display Breakdown
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', color: 'var(--primary)', fontWeight: 700, fontSize: '15px' }}>
+                <Info size={18} /> Live Pricing Breakdown
               </div>
-              <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, marginBottom: '6px' }}>B2B WHOLESALE PRICING</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '13px' }}>
-                  <span style={{ color: '#94a3b8' }}>Seller Price:</span>
-                  <span style={{ fontWeight: 600, color: '#e2e8f0' }}>₹{sellerB2bVal.toFixed(2)}</span>
+              <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 700, letterSpacing: '0.5px', marginBottom: '10px' }}>B2B WHOLESALE PRICING</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
+                  <span style={{ color: 'var(--text-dim)', fontWeight: 600, opacity: 0.85 }}>Base Price:</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{sellerB2bVal.toFixed(2)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '13px' }}>
-                  <span style={{ color: '#94a3b8' }}>Platform Commission:</span>
-                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>+₹{b2bCalculation.commissionAmount.toFixed(2)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
+                  <span style={{ color: 'var(--text-dim)', fontWeight: 600, opacity: 0.85 }}>GST ({gstNum}%):</span>
+                  <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>₹{((sellerB2bVal * gstNum) / 100).toFixed(2)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '14px' }}>
-                  <span style={{ color: '#e2e8f0', fontWeight: 700 }}>Customer Display Price:</span>
-                  <span style={{ color: '#ec4899', fontWeight: 800 }}>₹{b2bCalculation.customerPrice.toFixed(2)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid var(--border-color)', fontSize: '15px' }}>
+                  <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Total Price (incl. GST):</span>
+                  <span style={{ color: '#16a34a', fontWeight: 800, fontSize: '17px' }}>₹{(sellerB2bVal + (sellerB2bVal * gstNum) / 100).toFixed(2)}</span>
                 </div>
-                {gstNum > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '12px', color: '#94a3b8' }}>
-                    <span>Incl. {gstNum}% GST:</span>
-                    <span style={{ color: '#e2e8f0', fontWeight: 600 }}>₹{b2bTotalWithGst.toFixed(2)} Total</span>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -415,7 +396,6 @@ const AddProduct = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {b2bVariants.map((variant, index) => {
                   const vSellerPrice = parseFloat(variant.sellerPrice) || 0;
-                  const vCalc = calculateCustomerPrice(vSellerPrice, commType, commVal);
                   return (
                     <div key={index} style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', flexWrap: 'wrap' }}>
                       <div style={{ flex: 1.2, minWidth: '100px' }}>
@@ -430,15 +410,16 @@ const AddProduct = () => {
                           <option value="ltr">ltr</option>
                           <option value="ml">ml</option>
                           <option value="pcs">pcs</option>
+                          <option value="bag">bag</option>
                         </select>
                       </div>
                       <div style={{ flex: 1.5, minWidth: '130px' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Seller Price (₹) *</label>
-                        <input type="number" className="input-field" value={variant.sellerPrice} onChange={(e) => handleB2bChange(index, 'sellerPrice', e.target.value)} placeholder="Seller Net Price" min="0" step="0.01" required />
+                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Base Price (₹) *</label>
+                        <input type="number" className="input-field" value={variant.sellerPrice} onChange={(e) => handleB2bChange(index, 'sellerPrice', e.target.value)} placeholder="Base Net Price" min="0" step="0.01" required />
                       </div>
                       <div style={{ flex: 1.5, minWidth: '140px' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#ec4899', marginBottom: '4px', fontWeight: 600 }}>Customer Price (₹)</label>
-                        <input type="text" className="input-field" value={vSellerPrice > 0 ? `₹${vCalc.customerPrice.toFixed(2)} (+₹${vCalc.commissionAmount.toFixed(2)})` : '₹0.00'} disabled style={{ background: 'rgba(236, 72, 153, 0.05)', borderColor: 'rgba(236, 72, 153, 0.2)', color: '#ec4899', fontWeight: 700 }} />
+                        <label style={{ display: 'block', fontSize: '11px', color: '#22c55e', marginBottom: '4px', fontWeight: 600 }}>Total with GST (₹)</label>
+                        <input type="text" className="input-field" value={vSellerPrice > 0 ? `₹${(vSellerPrice + (vSellerPrice * gstNum) / 100).toFixed(2)}` : '₹0.00'} disabled style={{ background: 'rgba(34, 197, 94, 0.05)', borderColor: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', fontWeight: 700 }} />
                       </div>
                       <div style={{ flex: 1, minWidth: '80px' }}>
                         <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Stock *</label>
@@ -465,7 +446,6 @@ const AddProduct = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {priceTiers.map((tier, index) => {
                   const tSellerPrice = parseFloat(tier.sellerPrice) || 0;
-                  const tCalc = calculateCustomerPrice(tSellerPrice, commType, commVal);
                   return (
                     <div key={index} style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div style={{ flex: 1, minWidth: '120px' }}>
@@ -473,12 +453,12 @@ const AddProduct = () => {
                         <input type="number" className="input-field" value={tier.minQty} onChange={(e) => handleTierChange(index, 'minQty', e.target.value)} placeholder="e.g. 50" min="2" />
                       </div>
                       <div style={{ flex: 1.5, minWidth: '140px' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Seller Price per Unit (₹)</label>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginBottom: '4px' }}>Base Price per Unit (₹)</label>
                         <input type="number" className="input-field" value={tier.sellerPrice} onChange={(e) => handleTierChange(index, 'sellerPrice', e.target.value)} placeholder="e.g. 190" min="0" step="0.01" />
                       </div>
                       <div style={{ flex: 1.5, minWidth: '140px' }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#ec4899', marginBottom: '4px' }}>Customer Price</label>
-                        <input type="text" className="input-field" value={tSellerPrice > 0 ? `₹${tCalc.customerPrice.toFixed(2)}` : '₹0.00'} disabled style={{ background: 'rgba(236, 72, 153, 0.05)', color: '#ec4899', fontWeight: 600 }} />
+                        <label style={{ display: 'block', fontSize: '11px', color: '#22c55e', marginBottom: '4px' }}>Total with GST (₹)</label>
+                        <input type="text" className="input-field" value={tSellerPrice > 0 ? `₹${(tSellerPrice + (tSellerPrice * gstNum) / 100).toFixed(2)}` : '₹0.00'} disabled style={{ background: 'rgba(34, 197, 94, 0.05)', color: '#22c55e', fontWeight: 600 }} />
                       </div>
                       <button type="button" onClick={() => handleRemoveTier(index)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', height: '40px', display: 'flex', alignItems: 'center' }}>
                         <Trash2 size={16} />
