@@ -200,24 +200,28 @@ const EditProduct = () => {
         .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
         .map(v => {
           const sPrice = parseFloat(v.sellerPrice || v.price) || 0;
-          const vCalc = calculateCustomerPrice(sPrice, commType, commVal);
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sellerPrice: sPrice,
-            price: vCalc.customerPrice,
+            price: sPrice,
             stock: parseInt(v.stock) || 0
           };
         });
 
+      const cleanSubCategoryId = formData.subCategoryId && formData.subCategoryId !== '' && formData.subCategoryId !== 'null'
+        ? formData.subCategoryId
+        : null;
+
       await api.put(`/products/${id}`, {
         ...formData,
+        subCategoryId: cleanSubCategoryId,
         sellerB2bPrice: sellerB2bVal,
-        b2bPrice: b2bCalc.customerPrice,
+        b2bPrice: sellerB2bVal,
         sellerPrice: sellerB2bVal,
-        price: b2bCalc.customerPrice,
-        commissionType: commType,
-        commissionValue: commVal,
-        commissionAmount: b2bCalc.commissionAmount,
+        price: sellerB2bVal,
+        commissionType: 'flat',
+        commissionValue: 0,
+        commissionAmount: 0,
         b2b: formattedB2b,
         b2c: [],
         imageUrl,
@@ -286,7 +290,7 @@ const EditProduct = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             
             {/* General Info Card */}
-            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '25px' }}>
                 <div style={{ width: '35px', height: '35px', borderRadius: '10px', background: 'rgba(99, 102, 241, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
                   <Package size={18} />
@@ -296,7 +300,7 @@ const EditProduct = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Product Name</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Product Name</label>
                   <input
                     type="text"
                     className="input-field"
@@ -308,7 +312,7 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Description</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Description</label>
                   <textarea
                     className="input-field"
                     placeholder="Write product description..."
@@ -322,7 +326,7 @@ const EditProduct = () => {
             </div>
 
             {/* Pricing & Commission Card */}
-            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ width: '35px', height: '35px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e' }}>
@@ -334,9 +338,9 @@ const EditProduct = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Base Price (₹) *</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Base Price (₹) *</label>
                   <div style={{ position: 'relative' }}>
-                    <IndianRupee size={16} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <IndianRupee size={16} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
                     <input
                       type="number"
                       className="input-field"
@@ -349,12 +353,12 @@ const EditProduct = () => {
                       step="0.01"
                     />
                   </div>
-                  <span style={{ fontSize: '11px', color: '#64748b' }}>Your net wholesale payout price</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Your net wholesale payout price</span>
                 </div>
 
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>GST Rate (%)</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>GST Rate (%)</label>
                   <input
                     type="number"
                     className="input-field"
@@ -369,9 +373,9 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Stock Quantity</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Stock Quantity</label>
                   <div style={{ position: 'relative' }}>
-                    <Boxes size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <Boxes size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
                     <input
                       type="number"
                       className="input-field"
@@ -385,7 +389,7 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Unit Type</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Unit Type</label>
                   <select
                     className="input-field"
                     value={formData.unit}
@@ -407,7 +411,7 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>MOQ</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>MOQ</label>
                   <input
                     type="number"
                     className="input-field"
@@ -419,18 +423,7 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>SKU (Optional)</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="SKU-XYZ-001"
-                    value={formData.sku}
-                    onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>HSN Code</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>HSN Code</label>
                   <input
                     type="text"
                     className="input-field"
@@ -441,7 +434,7 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Stock Status</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Stock Status</label>
                   <select
                     className="input-field"
                     value={formData.stockStatus || 'Available'}
@@ -514,9 +507,9 @@ const EditProduct = () => {
               )}
 
               {/* B2B Size Variants Section */}
-              <div style={{ marginTop: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '30px' }}>
+              <div style={{ marginTop: '30px', borderTop: '1px solid var(--border-color)', paddingTop: '30px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h4 style={{ fontSize: '16px', fontWeight: 600, color: '#e2e8f0' }}>B2B Size Variants</h4>
+                  <h4 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}>B2B Size Variants</h4>
                   <button type="button" onClick={handleAddB2b} style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Plus size={16} /> Add B2B Variant
                   </button>
@@ -526,13 +519,13 @@ const EditProduct = () => {
                     {b2bVariants.map((variant, index) => {
                       const vSeller = parseFloat(variant.sellerPrice) || 0;
                       return (
-                        <div key={index} style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)', flexWrap: 'wrap' }}>
+                        <div key={index} style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '15px', border: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
                           <div style={{ flex: 1.2, minWidth: '100px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Size Value *</label>
+                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Size Value *</label>
                             <input type="number" className="input-field" value={variant.packetSizeVal} onChange={(e) => handleB2bChange(index, 'packetSizeVal', e.target.value)} placeholder="e.g. 500" required min="0" step="0.01" />
                           </div>
                           <div style={{ flex: 1, minWidth: '90px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Unit *</label>
+                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Unit *</label>
                             <select className="input-field" value={variant.packetSizeUnit} onChange={(e) => handleB2bChange(index, 'packetSizeUnit', e.target.value)} required style={{ height: '48px', cursor: 'pointer' }}>
                               <option value="g">g</option>
                               <option value="kg">kg</option>
@@ -543,7 +536,7 @@ const EditProduct = () => {
                             </select>
                           </div>
                           <div style={{ flex: 1.5, minWidth: '130px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Base Price (₹) *</label>
+                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Base Price (₹) *</label>
                             <input type="number" className="input-field" value={variant.sellerPrice} onChange={(e) => handleB2bChange(index, 'sellerPrice', e.target.value)} placeholder="Seller Net Price" min="0" step="0.01" required style={{ height: '48px' }} />
                           </div>
                           <div style={{ flex: 1.5, minWidth: '140px' }}>
@@ -551,7 +544,7 @@ const EditProduct = () => {
                             <input type="text" className="input-field" value={vSeller > 0 ? `₹${(vSeller + (vSeller * gstPercentNum) / 100).toFixed(2)}` : '₹0.00'} disabled style={{ background: 'rgba(34, 197, 94, 0.05)', borderColor: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', fontWeight: 700, height: '48px' }} />
                           </div>
                           <div style={{ flex: 1, minWidth: '80px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>Stock *</label>
+                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Stock *</label>
                             <input type="number" className="input-field" value={variant.stock} onChange={(e) => handleB2bChange(index, 'stock', e.target.value)} placeholder="Stock" min="0" required style={{ height: '48px' }} />
                           </div>
                           <button type="button" onClick={() => handleRemoveB2b(index)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
@@ -569,7 +562,7 @@ const EditProduct = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
             {/* Media Card */}
-            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '25px' }}>
                 <div style={{ width: '35px', height: '35px', borderRadius: '10px', background: 'rgba(168, 85, 247, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7' }}>
                   <Upload size={18} />
@@ -599,11 +592,11 @@ const EditProduct = () => {
                 >
                   {!previews.image && (
                     <>
-                      <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-                        <Upload size={24} color="#94a3b8" />
+                      <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
+                        <Upload size={24} color="var(--primary)" />
                       </div>
-                      <span style={{ fontSize: '14px', fontWeight: 600, color: '#94a3b8' }}>Upload Image</span>
-                      <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>PNG, JPG up to 5MB</span>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>Upload Image</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>PNG, JPG up to 5MB</span>
                     </>
                   )}
                   {previews.image && (
@@ -626,7 +619,7 @@ const EditProduct = () => {
             </div>
 
             {/* Category Card */}
-            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '25px' }}>
                 <div style={{ width: '35px', height: '35px', borderRadius: '10px', background: 'rgba(236, 72, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
                   <Layers size={18} />
@@ -636,7 +629,7 @@ const EditProduct = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Category</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Category</label>
                   <select
                     className="input-field"
                     value={formData.categoryId}
@@ -655,7 +648,7 @@ const EditProduct = () => {
                   </select>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#94a3b8' }}>Sub-Category</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Sub-Category (Optional)</label>
                   <select
                     className="input-field"
                     value={formData.subCategoryId}
@@ -663,7 +656,7 @@ const EditProduct = () => {
                     disabled={!formData.categoryId}
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
-                    <option value="">Select Sub-Category</option>
+                    <option value="">Select Sub-Category (Optional)</option>
                     {selectedCategory?.subCategories?.map(sub => (
                       <option key={sub._id} value={sub._id}>{sub.name}</option>
                     ))}
@@ -681,7 +674,7 @@ const EditProduct = () => {
           padding: '24px',
           borderRadius: '24px',
           background: 'rgba(255,255,255,0.02)',
-          border: '1px solid rgba(255,255,255,0.05)',
+          border: '1px solid var(--border-color)',
           display: 'flex',
           justifyContent: 'flex-end',
           gap: '16px',
@@ -694,7 +687,7 @@ const EditProduct = () => {
               borderRadius: '15px',
               background: 'transparent',
               border: '1px solid rgba(255,255,255,0.1)',
-              color: '#94a3b8',
+              color: 'var(--text-main)',
               fontWeight: 600,
               cursor: 'pointer',
               flex: '1',

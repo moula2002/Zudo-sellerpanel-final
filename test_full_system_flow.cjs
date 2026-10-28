@@ -101,10 +101,11 @@ console.log('  [PASS] EditProduct.jsx loads base wholesale seller price and prev
 
 const productsCode = fs.readFileSync(path.resolve('src', 'pages', 'Products.jsx'), 'utf8');
 assert(productsCode.includes('SELLER PRICE'), 'Products.jsx has SELLER PRICE column');
-assert(productsCode.includes('COMMISSION'), 'Products.jsx has COMMISSION column');
+assert(!productsCode.includes('<th>COMMISSION</th>'), 'Products.jsx has COMMISSION column removed');
+assert(productsCode.includes('UNIT TYPE'), 'Products.jsx has UNIT TYPE column');
 assert(productsCode.includes('CUSTOMER PRICE'), 'Products.jsx has CUSTOMER PRICE column');
 assert(productsCode.includes('SELLER PRICE (NET)'), 'Products.jsx modal has SELLER PRICE card');
-console.log('  [PASS] Products.jsx displays Seller Price, Commission, and Customer Price in table and modal');
+console.log('  [PASS] Products.jsx displays Seller Price, Unit Type, and Customer Price in table and modal');
 
 const ordersCode = fs.readFileSync(path.resolve('src', 'pages', 'Orders.jsx'), 'utf8');
 assert(ordersCode.includes('item.normalPrice'), 'Orders.jsx checks item.normalPrice for seller payout');

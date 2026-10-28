@@ -18,12 +18,7 @@ const ProductDetailModal = ({ product, onClose }) => {
             ? product.b2b[0].sellerPrice
             : (product.b2bPrice || product.price || 0)));
 
-  const customerPrice = product.b2bPrice || (product.b2b && product.b2b.length > 0 ? product.b2b[0].price : product.price || 0);
-  const customerTotalWithGst = customerPrice + (customerPrice * gstRate) / 100;
-
-  const commType = product.commissionType || 'flat';
-  const commVal = product.commissionValue !== undefined && product.commissionValue !== null ? product.commissionValue : 0;
-  const commLabel = commType === 'flat' ? `₹${commVal}/unit` : `${commVal}%`;
+  const customerTotalWithGst = sellerPrice + (sellerPrice * gstRate) / 100;
 
   return (
     <div style={{
@@ -132,10 +127,10 @@ const ProductDetailModal = ({ product, onClose }) => {
               <div style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
                 SELLER: <span style={{ color: 'var(--primary)', fontWeight: 800 }}>{product.sellerName || 'Your Store'}</span>
               </div>
-              <div style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 500 }}>PRODUCT SKU: <span style={{ color: 'var(--text-main)' }}>{product.sku || 'N/A'}</span></div>
+              {product.sku && <div style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 500 }}>PRODUCT SKU: <span style={{ color: 'var(--text-main)' }}>{product.sku}</span></div>}
             </div>
 
-            {/* Price & Commission Breakdown Grid */}
+            {/* Price Breakdown Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
               <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>SELLER PRICE (NET)</div>
@@ -143,24 +138,26 @@ const ProductDetailModal = ({ product, onClose }) => {
                 <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Your Payout</div>
               </div>
 
-              <div style={{ padding: '14px', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-                <div style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 700, marginBottom: '4px' }}>COMMISSION</div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: '#f59e0b' }}>{commLabel}</div>
-                <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '2px' }}>Platform Fee</div>
+              <div style={{ padding: '14px', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 700, marginBottom: '4px' }}>CUSTOMER PRICE (INCL. GST)</div>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: '#22c55e' }}>₹{customerTotalWithGst.toFixed(2)}</div>
+                <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
+                  Base: ₹{sellerPrice} + {gstRate}% GST
+                </div>
               </div>
 
-              <div style={{ padding: '14px', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 700, marginBottom: '4px' }}>CUSTOMER PRICE</div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: '#22c55e' }}>₹{customerPrice}</div>
-                <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
-                  Incl. GST: ₹{customerTotalWithGst.toFixed(2)}
+              <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>UNIT TYPE</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase' }}>
+                  {product.unit || 'PCS'}
                 </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>Standard Unit</div>
               </div>
 
               <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>AVAILABLE STOCK</div>
                 <div style={{ fontSize: '20px', fontWeight: 800, color: product.stock < 10 ? '#ef4444' : 'var(--text-main)' }}>
-                  {product.stock} <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{product.unit || 'pcs'}</span>
+                  {product.stock}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>MOQ: {product.moq || 1}</div>
               </div>
@@ -171,14 +168,18 @@ const ProductDetailModal = ({ product, onClose }) => {
               <div>
                 <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>B2B SIZE VARIANTS</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {product.b2b.map((v, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', fontSize: '13px' }}>
-                      <span style={{ fontWeight: 600 }}>{v.packetSize}</span>
-                      <span style={{ color: '#94a3b8' }}>Seller: ₹{v.sellerPrice !== undefined ? v.sellerPrice : v.price}</span>
-                      <span style={{ color: '#ec4899', fontWeight: 700 }}>Customer: ₹{v.price}</span>
-                      <span style={{ color: '#64748b' }}>Stock: {v.stock}</span>
-                    </div>
-                  ))}
+                  {product.b2b.map((v, i) => {
+                    const vSeller = parseFloat(v.sellerPrice !== undefined && v.sellerPrice !== null ? v.sellerPrice : v.price) || 0;
+                    const vTotal = vSeller + (vSeller * gstRate) / 100;
+                    return (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', fontSize: '13px' }}>
+                        <span style={{ fontWeight: 600 }}>{v.packetSize}</span>
+                        <span style={{ color: '#94a3b8' }}>Base: ₹{vSeller}</span>
+                        <span style={{ color: '#22c55e', fontWeight: 700 }}>Incl. GST: ₹{vTotal.toFixed(2)}</span>
+                        <span style={{ color: '#64748b' }}>Stock: {v.stock}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -299,7 +300,7 @@ const Products = () => {
       }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-main)' }}>Products</h1>
-          <p style={{ color: 'var(--text-dim)' }}>Manage your wholesale selling prices, platform commissions, and customer pricing.</p>
+          <p style={{ color: 'var(--text-dim)' }}>Manage your wholesale selling prices, taxes, and customer pricing.</p>
         </div>
         <button 
           onClick={() => navigate('/products/add')}
@@ -397,8 +398,8 @@ const Products = () => {
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>PRODUCT</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CATEGORY</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>SELLER PRICE</th>
-              <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>COMMISSION</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CUSTOMER PRICE</th>
+              <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>UNIT TYPE</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>STOCK</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>ACTIONS</th>
             </tr>
@@ -425,13 +426,8 @@ const Products = () => {
                         ? product.b2b[0].sellerPrice
                         : (product.b2bPrice || product.price || 0)));
 
-              const customerPrice = product.b2bPrice || (product.b2b && product.b2b.length > 0 ? product.b2b[0].price : product.price || 0);
               const displayGstRate = product.gstRate || product.gstPercent || 0;
-              const customerPriceWithGst = customerPrice + (customerPrice * displayGstRate) / 100;
-
-              const commType = product.commissionType || 'flat';
-              const commVal = product.commissionValue !== undefined && product.commissionValue !== null ? product.commissionValue : 0;
-              const commLabel = commType === 'flat' ? `₹${commVal}/unit` : `${commVal}%`;
+              const customerPriceWithGst = sellerPrice + (sellerPrice * displayGstRate) / 100;
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -447,7 +443,7 @@ const Products = () => {
                       </div>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '14px' }}>{product.name}</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>SKU: {product.sku || 'N/A'}</div>
+                        {product.sku && <div style={{ fontSize: '11px', color: '#64748b' }}>SKU: {product.sku}</div>}
                       </div>
                     </div>
                   </td>
@@ -456,23 +452,33 @@ const Products = () => {
                     <div style={{ fontSize: '11px', color: '#64748b' }}>{product.subCategoryId?.name || product.subCategory || ''}</div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#e2e8f0' }}>₹{sellerPrice}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>Seller Payout</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>₹{sellerPrice}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>Seller Payout</div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <span style={{ fontSize: '12px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '4px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                      {commLabel}
-                    </span>
-                  </td>
-                  <td style={{ padding: '16px 20px' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#22c55e' }}>₹{customerPrice}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-                      ₹{customerPriceWithGst.toFixed(2)} ({displayGstRate}% GST)
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>₹{customerPriceWithGst.toFixed(2)}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
+                      ₹{sellerPrice} ({displayGstRate}% GST)
                     </div>
                   </td>
+                  <td style={{ padding: '16px 20px' }}>
+                    <span style={{ 
+                      fontSize: '12px', 
+                      fontWeight: 700, 
+                      color: 'var(--text-main)', 
+                      background: 'rgba(99, 102, 241, 0.1)', 
+                      padding: '4px 10px', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(99, 102, 241, 0.2)',
+                      display: 'inline-block',
+                      textTransform: 'uppercase'
+                    }}>
+                      {product.unit || 'pcs'}
+                    </span>
+                  </td>
                   <td style={{ padding: '16px 20px', fontSize: '13px' }}>
-                    <div style={{ color: (product.stockStatus === 'Out of Stock' || product.stock < 10) ? '#ef4444' : '#22c55e', fontWeight: 600 }}>
-                      {product.stock} {product.unit || 'pcs'}
+                    <div style={{ color: (product.stockStatus === 'Out of Stock' || product.stock < 10) ? '#ef4444' : '#22c55e', fontWeight: 700, fontSize: '15px' }}>
+                      {product.stock}
                     </div>
                     {product.stockStatus && (
                       <span style={{
@@ -540,10 +546,8 @@ const Products = () => {
                     ? product.b2b[0].sellerPrice
                     : (product.b2bPrice || product.price || 0)));
 
-          const customerPrice = product.b2bPrice || (product.b2b && product.b2b.length > 0 ? product.b2b[0].price : product.price || 0);
-          const commType = product.commissionType || 'flat';
-          const commVal = product.commissionValue !== undefined && product.commissionValue !== null ? product.commissionValue : 0;
-          const commLabel = commType === 'flat' ? `₹${commVal}/unit` : `${commVal}%`;
+          const displayGstRate = product.gstRate || product.gstPercent || 0;
+          const customerPriceWithGst = sellerPrice + (sellerPrice * displayGstRate) / 100;
 
           return (
             <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', gap: '16px' }}>
@@ -560,15 +564,15 @@ const Products = () => {
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>{product.categoryId?.name}</div>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Seller: <strong>₹{sellerPrice}</strong></span>
-                  <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                    {commLabel}
+                  <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600 }}>Seller: <strong style={{ fontWeight: 800 }}>₹{sellerPrice}</strong></span>
+                  <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 800 }}>Customer: ₹{customerPriceWithGst.toFixed(2)}</span>
+                  <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--text-main)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    {product.unit || 'pcs'}
                   </span>
-                  <span style={{ fontSize: '13px', color: '#22c55e', fontWeight: 800 }}>Customer: ₹{customerPrice}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '12px', color: product.stock < 10 ? '#ef4444' : '#94a3b8' }}>{product.stock} units left</div>
+                  <div style={{ fontSize: '12px', color: product.stock < 10 ? '#ef4444' : '#94a3b8' }}>{product.stock} {product.unit || 'units'} left</div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>

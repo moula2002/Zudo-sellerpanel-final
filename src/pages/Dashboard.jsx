@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { getImageUrl } from '../utils/api';
-import { Store, MapPin, Phone, Building2, Package, ShoppingBag, TrendingUp, Plus, ArrowRight } from 'lucide-react';
+import { Store, MapPin, Phone, Building2, Package, ShoppingBag, TrendingUp, Plus, ArrowRight, Boxes, AlertTriangle } from 'lucide-react';
 import Layout from '../components/Layout';
 
 const StatCard = ({ icon: Icon, label, value, color, onClick }) => (
@@ -13,16 +13,19 @@ const StatCard = ({ icon: Icon, label, value, color, onClick }) => (
       display: 'flex', 
       gap: '16px', 
       alignItems: 'center',
-      cursor: onClick ? 'pointer' : 'default'
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease'
     }}
     onClick={onClick}
+    onMouseEnter={e => { if (onClick) e.currentTarget.style.transform = 'translateY(-2px)'; }}
+    onMouseLeave={e => { if (onClick) e.currentTarget.style.transform = 'translateY(0)'; }}
   >
-    <div style={{ padding: '12px', background: `${color}1a`, color: color, borderRadius: '12px' }}>
+    <div style={{ padding: '12px', background: `${color}1a`, color: color, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <Icon size={24} />
     </div>
     <div>
-      <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{label}</div>
-      <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>{value}</div>
+      <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 500 }}>{label}</div>
+      <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>{value}</div>
     </div>
   </div>
 );
@@ -63,19 +66,39 @@ const ActionButton = ({ icon: Icon, label, onClick, color }) => (
 
 const Dashboard = () => {
   const [seller, setSeller] = useState(null);
-  const [stats, setStats] = useState({ todayOrders: 0, totalOrders: 0, outstandingPayments: 0, lowStockCount: 0, lowStockProducts: [] });
+  const [stats, setStats] = useState({ 
+    totalProducts: 0, 
+    todayOrders: 0, 
+    totalOrders: 0, 
+    outstandingPayments: 0, 
+    lowStockCount: 0, 
+    lowStockProducts: [] 
+  });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [profileRes, statsRes] = await Promise.all([
+        const [profileRes, statsRes, productsRes] = await Promise.all([
           api.get('/sellers/me'),
-          api.get('/sellers/stats').catch(() => ({ data: { todayOrders: 0, totalOrders: 0, outstandingPayments: 0, lowStockCount: 0, lowStockProducts: [] } }))
+          api.get('/sellers/stats').catch(() => ({ data: {} })),
+          api.get('/sellers/products').catch(() => ({ data: [] }))
         ]);
         setSeller(profileRes.data);
-        setStats(statsRes.data);
+
+        const serverStats = statsRes.data || {};
+        const productsList = Array.isArray(productsRes.data) ? productsRes.data : [];
+        const lowStockFromProducts = productsList.filter(p => (parseInt(p.stock) || 0) <= 5);
+
+        setStats({
+          totalProducts: serverStats.totalProducts !== undefined ? serverStats.totalProducts : productsList.length,
+          todayOrders: serverStats.todayOrders || 0,
+          totalOrders: serverStats.totalOrders || 0,
+          outstandingPayments: serverStats.outstandingPayments || 0,
+          lowStockCount: serverStats.lowStockCount !== undefined ? serverStats.lowStockCount : lowStockFromProducts.length,
+          lowStockProducts: serverStats.lowStockProducts || lowStockFromProducts
+        });
         
         // Sync isVerified status to localStorage
         const user = JSON.parse(localStorage.getItem('zudo_seller_user') || '{}');
@@ -111,10 +134,17 @@ const Dashboard = () => {
 
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
         gap: '24px', 
         marginBottom: '40px' 
       }}>
+        <StatCard 
+          icon={Boxes} 
+          label="Total Products" 
+          value={stats.totalProducts || 0} 
+          color="#8b5cf6" 
+          onClick={() => navigate('/products')}
+        />
         <StatCard 
           icon={ShoppingBag} 
           label="Today's Orders" 
@@ -136,7 +166,7 @@ const Dashboard = () => {
           color="#22c55e" 
         />
         <StatCard 
-          icon={Package} 
+          icon={AlertTriangle} 
           label="Low Stock Alert" 
           value={stats.lowStockCount || 0} 
           color="#ef4444" 
