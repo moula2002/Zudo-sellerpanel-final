@@ -11,14 +11,19 @@ const ProductDetailModal = ({ product, onClose }) => {
   
   // Base B2B wholesale prices
   const sellerPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
-    ? product.sellerB2bPrice
+    ? Number(product.sellerB2bPrice)
     : (product.sellerPrice !== undefined && product.sellerPrice !== null
-        ? product.sellerPrice
+        ? Number(product.sellerPrice)
         : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
-            ? product.b2b[0].sellerPrice
-            : (product.b2bPrice || product.price || 0)));
+            ? Number(product.b2b[0].sellerPrice)
+            : Number(product.b2bPrice || product.price || 0)));
 
-  const customerTotalWithGst = sellerPrice + (sellerPrice * gstRate) / 100;
+  const commType = product.commissionType || 'flat';
+  const commVal = Number(product.commissionValue || 0);
+  const commAmount = Number(product.commissionAmount !== undefined ? product.commissionAmount : (commType === 'percentage' ? (sellerPrice * commVal) / 100 : commVal));
+  const baseCustomerPrice = sellerPrice + commAmount;
+  const modalGstAmount = (baseCustomerPrice * gstRate) / 100;
+  const customerTotalWithGst = product.finalCustomerPrice ? Number(product.finalCustomerPrice) : (baseCustomerPrice + modalGstAmount);
 
   return (
     <div style={{
@@ -138,11 +143,19 @@ const ProductDetailModal = ({ product, onClose }) => {
                 <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Your Payout</div>
               </div>
 
+              <div style={{ padding: '14px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: '16px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                <div style={{ fontSize: '10px', color: '#6366f1', fontWeight: 700, marginBottom: '4px' }}>COMMISSION</div>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: '#6366f1' }}>₹{commAmount.toFixed(2)}</div>
+                <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '2px' }}>
+                  {commType === 'flat' ? `Flat ₹${commAmount}/unit` : `${commVal}%`}
+                </div>
+              </div>
+
               <div style={{ padding: '14px', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 700, marginBottom: '4px' }}>CUSTOMER PRICE (INCL. GST)</div>
+                <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 700, marginBottom: '4px' }}>CUSTOMER FINAL PRICE</div>
                 <div style={{ fontSize: '20px', fontWeight: 900, color: '#22c55e' }}>₹{customerTotalWithGst.toFixed(2)}</div>
                 <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
-                  Base: ₹{sellerPrice} + {gstRate}% GST
+                  Base: ₹{(sellerPrice + commAmount).toFixed(2)} + {gstRate}% GST
                 </div>
               </div>
 
@@ -427,7 +440,8 @@ const Products = () => {
                         : (product.b2bPrice || product.price || 0)));
 
               const displayGstRate = product.gstRate || product.gstPercent || 0;
-              const customerPriceWithGst = sellerPrice + (sellerPrice * displayGstRate) / 100;
+              const itemComm = Number(product.commissionAmount !== undefined ? product.commissionAmount : (product.commissionType === 'flat' ? (product.commissionValue || 0) : (sellerPrice * (product.commissionValue || 0)) / 100));
+              const customerPriceWithGst = product.finalCustomerPrice ? Number(product.finalCustomerPrice) : ((sellerPrice + itemComm) * (1 + displayGstRate / 100));
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
