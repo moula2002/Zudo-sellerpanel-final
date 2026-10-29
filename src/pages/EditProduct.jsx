@@ -174,13 +174,9 @@ const EditProduct = () => {
   const selectedCategory = categories.find(c => String(c._id) === String(formData.categoryId));
   const gstPercentNum = Number(formData.gstPercent) || 0;
 
-  const b2bCustomerBase = b2bCalc.customerPrice * calcQuantity;
   const b2bSellerBase = sellerB2bVal * calcQuantity;
-  const b2bCommissionTotal = b2bCalc.commissionAmount * calcQuantity;
-  const b2bGstAmount = (b2bCustomerBase * gstPercentNum) / 100;
-  const b2bPriceTotal = b2bCustomerBase + b2bGstAmount;
-
-  const matchedAdminRule = findCategoryCommission(commissions, formData.categoryId, formData.unit);
+  const b2bGstAmount = (b2bSellerBase * gstPercentNum) / 100;
+  const b2bPriceTotal = b2bSellerBase + b2bGstAmount;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -393,11 +389,7 @@ const EditProduct = () => {
                   <select
                     className="input-field"
                     value={formData.unit}
-                    onChange={e => {
-                      const newUnit = e.target.value;
-                      setFormData(prev => ({ ...prev, unit: newUnit }));
-                      handleCategoryOrUnitChange(formData.categoryId, newUnit);
-                    }}
+                    onChange={e => setFormData(prev => ({ ...prev, unit: e.target.value }))}
                     required
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
@@ -500,30 +492,13 @@ const EditProduct = () => {
                       <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{b2bSellerBase.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                      <span style={{ color: '#6366f1', fontWeight: 600 }}>Commission ({commType === 'flat' ? `Flat ₹${b2bCalc.commissionAmount}/unit` : `${commVal}%`}):</span>
-                      <span style={{ color: '#6366f1', fontWeight: 700 }}>+₹{b2bCommissionTotal.toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
                       <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Applicable GST ({gstPercentNum}%):</span>
                       <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>+₹{b2bGstAmount.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid var(--border-color)', fontSize: '15px' }}>
-                      <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Final Customer Price:</span>
+                      <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Total Price (incl. GST):</span>
                       <span style={{ color: '#16a34a', fontWeight: 800, fontSize: '17px' }}>₹{b2bPriceTotal.toFixed(2)}</span>
                     </div>
-                    {commType === 'flat' && (
-                      <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)', fontSize: '11px', color: 'var(--text-dim)', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <span>Rate: ₹{b2bCalc.commissionAmount}/unit</span>
-                        <span>•</span>
-                        <span>Qty 1: ₹{(b2bCalc.commissionAmount * 1).toFixed(2)}</span>
-                        <span>•</span>
-                        <span>Qty 2: ₹{(b2bCalc.commissionAmount * 2).toFixed(2)}</span>
-                        <span>•</span>
-                        <span>Qty 3: ₹{(b2bCalc.commissionAmount * 3).toFixed(2)}</span>
-                        <span>•</span>
-                        <span>Qty 5: ₹{(b2bCalc.commissionAmount * 5).toFixed(2)}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
