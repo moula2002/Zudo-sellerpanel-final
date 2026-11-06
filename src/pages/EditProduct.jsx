@@ -403,7 +403,7 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>MOQ</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Maximum order quantity</label>
                   <input
                     type="number"
                     className="input-field"

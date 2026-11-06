@@ -159,7 +159,7 @@ const ProductDetailModal = ({ product, onClose }) => {
                 <div style={{ fontSize: '20px', fontWeight: 800, color: product.stock < 10 ? '#ef4444' : 'var(--text-main)' }}>
                   {product.stock}
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>MOQ: {product.moq || 1}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>Maximum order quantity: {product.moq || 1}</div>
               </div>
             </div>
 

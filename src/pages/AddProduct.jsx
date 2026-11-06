@@ -495,7 +495,7 @@ const AddProduct = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
-                  MOQ *
+                  Maximum order quantity *
                 </label>
                 <input 
                   type="number" 
