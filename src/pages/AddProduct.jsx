@@ -695,21 +695,7 @@ const AddProduct = () => {
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
-                  Stock Quantity *
-                </label>
-                <input 
-                  type="number" 
-                  name="stock" 
-                  className="input-field" 
-                  value={formData.stock} 
-                  onChange={handleInputChange} 
-                  required 
-                  min="0" 
-                  placeholder="100"
-                />
-              </div>
+              
 
               <div>
                 <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>

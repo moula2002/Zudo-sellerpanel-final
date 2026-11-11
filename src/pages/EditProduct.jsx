@@ -13,7 +13,6 @@ import {
   IndianRupee,
   Layers,
   FileText,
-  Boxes,
   ClipboardList,
   RefreshCcw,
   Trash2,
@@ -640,21 +639,7 @@ const EditProduct = () => {
                   />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Stock Quantity</label>
-                  <div style={{ position: 'relative' }}>
-                    <Boxes size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
-                    <input
-                      type="number"
-                      className="input-field"
-                      style={{ paddingLeft: '45px' }}
-                      placeholder="0"
-                      value={formData.stock}
-                      onChange={e => setFormData({ ...formData, stock: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
+                
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Unit Type</label>
