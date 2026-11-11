@@ -33,7 +33,7 @@ const EditProduct = () => {
     commissionType: 'flat',
     commissionValue: '2',
     moq: '1',
-    unit: 'pcs',
+    unit: 'BOX',
     categoryId: '',
     subCategoryId: '',
     stock: '',
