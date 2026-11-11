@@ -3,6 +3,40 @@ import api, { getImageUrl } from '../utils/api';
 import { RefreshCcw, Search, User, MapPin, Package, AlertCircle, Calendar, ExternalLink, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 
+export const getReturnStatusConfig = (status) => {
+  const s = String(status || '').trim().toLowerCase();
+
+  if (s.includes('approved')) {
+    return {
+      bg: 'rgba(34, 197, 94, 0.14)',
+      color: '#15803d',
+      border: '1px solid rgba(34, 197, 94, 0.3)',
+      cardBg: 'rgba(34, 197, 94, 0.04)',
+      cardBorder: '#22c55e',
+      label: 'RETURN APPROVED',
+    };
+  }
+  if (s.includes('rejected')) {
+    return {
+      bg: 'rgba(148, 163, 184, 0.18)',
+      color: '#475569',
+      border: '1px solid rgba(148, 163, 184, 0.35)',
+      cardBg: 'rgba(148, 163, 184, 0.05)',
+      cardBorder: '#94a3b8',
+      label: 'RETURN REJECTED',
+    };
+  }
+  // Default to RETURN REQUESTED (Orange / Amber background, dark orange text)
+  return {
+    bg: 'rgba(245, 158, 11, 0.14)',
+    color: '#c2410c',
+    border: '1px solid rgba(245, 158, 11, 0.35)',
+    cardBg: 'rgba(245, 158, 11, 0.05)',
+    cardBorder: '#f59e0b',
+    label: s ? status.toUpperCase() : 'RETURN REQUESTED',
+  };
+};
+
 const Returns = () => {
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +97,23 @@ const Returns = () => {
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>STATUS</div>
-              <div style={{ fontWeight: 700, fontSize: '14px', color: '#ef4444' }}>{order.orderStatus.toUpperCase()}</div>
+              {(() => {
+                const statusCfg = getReturnStatusConfig(order.orderStatus);
+                return (
+                  <span style={{ 
+                    padding: '4px 12px', 
+                    borderRadius: '20px', 
+                    fontSize: '12px', 
+                    fontWeight: 700, 
+                    background: statusCfg.bg, 
+                    color: statusCfg.color, 
+                    border: statusCfg.border, 
+                    display: 'inline-block' 
+                  }}>
+                    {order.orderStatus ? order.orderStatus.toUpperCase() : 'RETURN REQUESTED'}
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
@@ -102,6 +152,7 @@ const Returns = () => {
             const qty = Number(item.quantity) || 0;
             const unitPrice = Number(item.price) || 0;
             const totalCost = qty * unitPrice;
+            const itemCfg = getReturnStatusConfig(item.returnStatus);
 
             return (
               <div key={idx} style={{ 
@@ -109,8 +160,8 @@ const Returns = () => {
                 flexDirection: 'column',
                 gap: '12px', 
                 padding: '16px',
-                background: 'rgba(245, 158, 11, 0.05)',
-                border: '1px dashed #f59e0b',
+                background: itemCfg.cardBg,
+                border: '1px dashed ' + itemCfg.cardBorder,
                 borderRadius: '16px'
               }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
@@ -142,8 +193,10 @@ const Returns = () => {
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b', marginTop: '6px' }}>
-                      Status: {item.returnStatus.toUpperCase()}
+                    <div style={{ marginTop: '8px' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: '16px', fontSize: '11px', fontWeight: 700, background: itemCfg.bg, color: itemCfg.color, border: itemCfg.border, display: 'inline-block' }}>
+                        Status: {item.returnStatus.toUpperCase()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -240,9 +293,14 @@ const Returns = () => {
                   </div>
                 </td>
                 <td style={{ padding: '16px 24px' }}>
-                  <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                    {order.orderStatus.toUpperCase()}
-                  </span>
+                  {(() => {
+                    const statusCfg = getReturnStatusConfig(order.orderStatus);
+                    return (
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: statusCfg.bg, color: statusCfg.color, border: statusCfg.border, display: 'inline-block', letterSpacing: '0.3px' }}>
+                        {order.orderStatus ? order.orderStatus.toUpperCase() : 'RETURN REQUESTED'}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td style={{ padding: '16px 24px' }}>
                   <button 

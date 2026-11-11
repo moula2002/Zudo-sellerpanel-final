@@ -14,9 +14,25 @@ const StatusBadge = ({ status }) => {
     'Delivered': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', icon: CheckCircle },
     'Cancelled': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', icon: XCircle },
     'Rejected by Seller': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', icon: XCircle },
+    'Return Requested': { bg: 'rgba(245, 158, 11, 0.14)', color: '#c2410c', icon: RefreshCcw },
+    'RETURN REQUESTED': { bg: 'rgba(245, 158, 11, 0.14)', color: '#c2410c', icon: RefreshCcw },
+    'Return Approved': { bg: 'rgba(34, 197, 94, 0.14)', color: '#15803d', icon: CheckCircle },
+    'RETURN APPROVED': { bg: 'rgba(34, 197, 94, 0.14)', color: '#15803d', icon: CheckCircle },
+    'Return Rejected': { bg: 'rgba(148, 163, 184, 0.18)', color: '#475569', icon: XCircle },
+    'RETURN REJECTED': { bg: 'rgba(148, 163, 184, 0.18)', color: '#475569', icon: XCircle },
   };
 
-  const config = configs[status] || configs['Pending'];
+  const normalized = String(status || '').trim().toLowerCase();
+  let fallbackConfig = configs['Pending'];
+  if (normalized.includes('approved')) {
+    fallbackConfig = configs['RETURN APPROVED'];
+  } else if (normalized.includes('rejected')) {
+    fallbackConfig = configs['RETURN REJECTED'];
+  } else if (normalized.includes('requested') || normalized.includes('return')) {
+    fallbackConfig = configs['RETURN REQUESTED'];
+  }
+
+  const config = configs[status] || fallbackConfig;
   const Icon = config.icon || Clock;
 
   return (
@@ -224,7 +240,22 @@ const Orders = () => {
                   onError={(e) => e.target.src = 'https://placehold.co/48'}
                 />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{item.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{item.name}</div>
+                    {item.returnStatus && item.returnStatus !== 'None' && (
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        background: item.returnStatus.toLowerCase().includes('approved') ? 'rgba(34, 197, 94, 0.14)' : item.returnStatus.toLowerCase().includes('rejected') ? 'rgba(148, 163, 184, 0.18)' : 'rgba(245, 158, 11, 0.14)',
+                        color: item.returnStatus.toLowerCase().includes('approved') ? '#15803d' : item.returnStatus.toLowerCase().includes('rejected') ? '#475569' : '#c2410c',
+                        border: '1px solid ' + (item.returnStatus.toLowerCase().includes('approved') ? 'rgba(34, 197, 94, 0.3)' : item.returnStatus.toLowerCase().includes('rejected') ? 'rgba(148, 163, 184, 0.35)' : 'rgba(245, 158, 11, 0.35)')
+                      }}>
+                        {item.returnStatus.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
                     Qty: {item.quantity} × ₹{item.normalPrice !== undefined && item.normalPrice !== null ? item.normalPrice : (item.netPrice !== undefined ? item.netPrice : item.price)} (Seller Payout)
                     {item.price && item.normalPrice && item.price !== item.normalPrice && (
