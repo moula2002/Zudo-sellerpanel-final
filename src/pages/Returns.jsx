@@ -31,16 +31,6 @@ const Returns = () => {
            customerName.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
-  const handleItemReturnAction = async (orderId, itemId, status) => {
-    try {
-      await api.put(`/orders/${orderId}/items/${itemId}/return-status`, { status });
-      fetchReturns();
-      setSelectedOrder(null);
-    } catch (error) {
-      alert('Failed to update return status');
-    }
-  };
-
   const ReturnDetailPanel = ({ order, onClose }) => {
     if (!order) return null;
 
@@ -134,25 +124,6 @@ const Returns = () => {
                 <a href={getImageUrl(item.returnImage)} target="_blank" rel="noopener noreferrer">
                   <img src={getImageUrl(item.returnImage)} alt="Return proof" style={{ width: '100px', height: '100px', borderRadius: '8px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x100?text=No+Image'; }} />
                 </a>
-              )}
-              
-              {item.returnStatus === 'Return Requested' && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                  <button 
-                    onClick={() => handleItemReturnAction(order._id, item._id, 'Return Approved')} 
-                    className="btn-primary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '12px', background: '#10b981' }}
-                  >
-                    Approve
-                  </button>
-                  <button 
-                    onClick={() => handleItemReturnAction(order._id, item._id, 'Return Rejected')} 
-                    className="btn-primary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '12px', background: '#ef4444' }}
-                  >
-                    Reject
-                  </button>
-                </div>
               )}
             </div>
           ))}
