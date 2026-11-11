@@ -159,7 +159,7 @@ const AddProduct = () => {
   };
 
   // Add custom unit for main B2B Pricing dropdown
-  const handleAddMainCustomUnit = () => {
+  const handleAddMainCustomUnit = async () => {
     const clean = (mainCustomInput || '').trim().toUpperCase();
     if (!clean) {
       setMainCustomError('Unit name cannot be empty');
@@ -169,6 +169,11 @@ const AddProduct = () => {
       setMainCustomError(`Unit "${clean}" already exists`);
       return;
     }
+    try {
+      await api.post('/products/custom-units', { unit: clean, type: 'main' });
+    } catch (e) {
+      console.warn('Backend custom unit sync (main):', e.response?.data?.message || e.message);
+    }
     setMainUnitOptions(prev => [...prev, clean]);
     setFormData(prev => ({ ...prev, unit: clean }));
     setMainCustomInput('');
@@ -177,7 +182,7 @@ const AddProduct = () => {
   };
 
   // Add custom unit for a specific B2B variant row
-  const handleAddVariantCustomUnit = () => {
+  const handleAddVariantCustomUnit = async () => {
     if (variantCustomModalIndex === null) return;
     const clean = (variantCustomInput || '').trim().toUpperCase();
     if (!clean) {
@@ -189,6 +194,12 @@ const AddProduct = () => {
     if (currentOptions.includes(clean)) {
       setVariantCustomError(`Unit "${clean}" already exists in this variant`);
       return;
+    }
+
+    try {
+      await api.post('/products/custom-units', { unit: clean, type: 'variant' });
+    } catch (e) {
+      console.warn('Backend custom unit sync (variant):', e.response?.data?.message || e.message);
     }
 
     const newVariants = [...b2bVariants];
