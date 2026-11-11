@@ -29,7 +29,26 @@ const AddProduct = () => {
   const [b2bVariants, setB2bVariants] = useState([]);
   const [imagePreview, setImagePreview] = useState(null);
   const [currentSellerInfo, setCurrentSellerInfo] = useState(null);
-  
+
+  // Main B2B Pricing Custom Unit Management
+  const [mainUnitOptions, setMainUnitOptions] = useState(['BOX', 'BAG']);
+  const [showMainCustomModal, setShowMainCustomModal] = useState(false);
+  const [mainCustomInput, setMainCustomInput] = useState('');
+  const [mainCustomError, setMainCustomError] = useState('');
+
+  // B2B Size Variants Custom Unit Management
+  const [variantCustomModalIndex, setVariantCustomModalIndex] = useState(null);
+  const [variantCustomInput, setVariantCustomInput] = useState('');
+  const [variantCustomError, setVariantCustomError] = useState('');
+  const [globalVariantCustomUnits, setGlobalVariantCustomUnits] = useState([]);
+
+  // Unit Management Modal (Standalone Manager for all custom units)
+  const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
+  const [unitDeleteLoading, setUnitDeleteLoading] = useState(false);
+  const [unitDeleteFeedback, setUnitDeleteFeedback] = useState({ type: '', text: '' });
+
+  const DEFAULT_VARIANT_UNITS = ['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'];
+
   const [formData, setFormData] = useState({
     name: '',
     categoryId: '',
@@ -40,7 +59,7 @@ const AddProduct = () => {
     commissionValue: 0,
     gstPercent: 0,
     moq: 1,
-    unit: 'pcs',
+    unit: 'BOX',
     sellerId: '',
     stock: 0,
     stockStatus: 'Available',
@@ -53,12 +72,20 @@ const AddProduct = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [cats, sells] = await Promise.all([
+        const [cats, sells, customRes] = await Promise.all([
           api.get('/categories').catch(() => ({ data: [] })),
-          api.get('/sellers').catch(() => ({ data: [] }))
+          api.get('/sellers').catch(() => ({ data: [] })),
+          api.get('/products/custom-units').catch(() => ({ data: { mainUnits: [], variantUnits: [] } }))
         ]);
         setCategories(cats.data || []);
         setSellers(sells.data || []);
+
+        if (customRes.data?.mainUnits && Array.isArray(customRes.data.mainUnits)) {
+          setMainUnitOptions(prev => Array.from(new Set([...prev, ...customRes.data.mainUnits])));
+        }
+        if (customRes.data?.variantUnits && Array.isArray(customRes.data.variantUnits)) {
+          setGlobalVariantCustomUnits(customRes.data.variantUnits);
+        }
         
         // Auto-populate logged-in seller's ID and details
         const storedUserStr = localStorage.getItem('zudo_seller_user');
@@ -115,13 +142,153 @@ const AddProduct = () => {
 
   const handleAddB2b = () => setB2bVariants([
     ...b2bVariants, 
-    { packetSizeVal: '', packetSizeUnit: formData.unit || 'kg', sellerPrice: '', price: '', stock: '' }
+    { 
+      packetSizeVal: '', 
+      packetSizeUnit: 'pcs', 
+      customUnitOptions: Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustomUnits])),
+      sellerPrice: '', 
+      price: '', 
+      stock: '' 
+    }
   ]);
   const handleRemoveB2b = (index) => setB2bVariants(b2bVariants.filter((_, i) => i !== index));
   const handleB2bChange = (index, field, value) => {
     const newArr = [...b2bVariants];
     newArr[index][field] = value;
     setB2bVariants(newArr);
+  };
+
+  // Add custom unit for main B2B Pricing dropdown
+  const handleAddMainCustomUnit = () => {
+    const clean = (mainCustomInput || '').trim().toUpperCase();
+    if (!clean) {
+      setMainCustomError('Unit name cannot be empty');
+      return;
+    }
+    if (mainUnitOptions.includes(clean)) {
+      setMainCustomError(`Unit "${clean}" already exists`);
+      return;
+    }
+    setMainUnitOptions(prev => [...prev, clean]);
+    setFormData(prev => ({ ...prev, unit: clean }));
+    setMainCustomInput('');
+    setMainCustomError('');
+    setShowMainCustomModal(false);
+  };
+
+  // Add custom unit for a specific B2B variant row
+  const handleAddVariantCustomUnit = () => {
+    if (variantCustomModalIndex === null) return;
+    const clean = (variantCustomInput || '').trim().toUpperCase();
+    if (!clean) {
+      setVariantCustomError('Unit name cannot be empty');
+      return;
+    }
+    const targetVariant = b2bVariants[variantCustomModalIndex];
+    const currentOptions = targetVariant?.customUnitOptions || DEFAULT_VARIANT_UNITS;
+    if (currentOptions.includes(clean)) {
+      setVariantCustomError(`Unit "${clean}" already exists in this variant`);
+      return;
+    }
+
+    const newVariants = [...b2bVariants];
+    newVariants[variantCustomModalIndex] = {
+      ...targetVariant,
+      customUnitOptions: [...currentOptions, clean],
+      packetSizeUnit: clean
+    };
+    setB2bVariants(newVariants);
+    setGlobalVariantCustomUnits(prev => Array.from(new Set([...prev, clean])));
+    setVariantCustomInput('');
+    setVariantCustomError('');
+    setVariantCustomModalIndex(null);
+  };
+
+  // Delete a custom unit (Main B2B unit)
+  const handleDeleteMainCustomUnit = async (unitToDelete) => {
+    const clean = String(unitToDelete || '').trim().toUpperCase();
+    if (clean === 'BOX' || clean === 'BAG') {
+      alert('Permanent default units (BOX, BAG) cannot be deleted.');
+      return;
+    }
+    const confirmed = window.confirm(`Are you sure you want to delete custom unit "${clean}"?`);
+    if (!confirmed) return;
+
+    setUnitDeleteLoading(true);
+    setUnitDeleteFeedback({ type: '', text: '' });
+
+    try {
+      const res = await api.delete('/products/custom-units', {
+        data: { unit: clean, type: 'main' }
+      });
+
+      // Update state: remove from mainUnitOptions
+      setMainUnitOptions(prev => prev.filter(u => u !== clean));
+
+      // If currently selected unit was the deleted one, reset to default BOX
+      if (formData.unit === clean) {
+        setFormData(prev => ({ ...prev, unit: 'BOX' }));
+      }
+
+      setUnitDeleteFeedback({
+        type: 'success',
+        text: res.data?.message || `Unit "${clean}" deleted successfully.`
+      });
+      setTimeout(() => setUnitDeleteFeedback({ type: '', text: '' }), 4000);
+    } catch (err) {
+      console.error('Failed to delete custom unit:', err);
+      const msg = err.response?.data?.message || `Failed to delete custom unit "${clean}".`;
+      setUnitDeleteFeedback({ type: 'error', text: msg });
+      alert(msg);
+    } finally {
+      setUnitDeleteLoading(false);
+    }
+  };
+
+  // Delete a custom unit from a B2B variant
+  const handleDeleteVariantCustomUnit = async (variantIdx, unitToDelete) => {
+    const clean = String(unitToDelete || '').trim();
+    const DEFAULT_SET = new Set(['pcs', 'g', 'kg', 'ltr', 'ml', 'bag', 'PCS', 'G', 'KG', 'LTR', 'ML', 'BAG']);
+    if (DEFAULT_SET.has(clean) || DEFAULT_SET.has(clean.toLowerCase())) {
+      alert(`Standard default variant units (${clean}) cannot be deleted.`);
+      return;
+    }
+    const confirmed = window.confirm(`Are you sure you want to delete custom variant unit "${clean}"?`);
+    if (!confirmed) return;
+
+    setUnitDeleteLoading(true);
+    setUnitDeleteFeedback({ type: '', text: '' });
+
+    try {
+      const res = await api.delete('/products/custom-units', {
+        data: { unit: clean, type: 'variant' }
+      });
+
+      // Update the specific variant row's options and any other rows carrying it
+      setB2bVariants(prev => prev.map(v => {
+        const updatedOptions = (v.customUnitOptions || DEFAULT_VARIANT_UNITS).filter(u => u !== clean);
+        return {
+          ...v,
+          customUnitOptions: updatedOptions,
+          packetSizeUnit: v.packetSizeUnit === clean ? 'pcs' : v.packetSizeUnit
+        };
+      }));
+
+      setGlobalVariantCustomUnits(prev => prev.filter(u => u !== clean));
+
+      setUnitDeleteFeedback({
+        type: 'success',
+        text: res.data?.message || `Variant unit "${clean}" deleted successfully.`
+      });
+      setTimeout(() => setUnitDeleteFeedback({ type: '', text: '' }), 4000);
+    } catch (err) {
+      console.error('Failed to delete variant custom unit:', err);
+      const msg = err.response?.data?.message || `Failed to delete custom unit "${clean}".`;
+      setUnitDeleteFeedback({ type: 'error', text: msg });
+      alert(msg);
+    } finally {
+      setUnitDeleteLoading(false);
+    }
   };
 
   // Live calculation of Customer Wholesale Prices (Seller Price + GST, with 0 Commission)
@@ -188,7 +355,13 @@ const AddProduct = () => {
       
       data.append('gstPercent', gstNum);
       data.append('moq', parseInt(formData.moq) || 1);
-      data.append('unit', formData.unit);
+      data.append('unit', (formData.unit || 'BOX').trim().toUpperCase());
+      const customUnitsToSave = Array.from(new Set(
+        mainUnitOptions
+          .filter(u => u !== 'BOX' && u !== 'BAG')
+          .concat(formData.unit && formData.unit !== 'BOX' && formData.unit !== 'BAG' ? [formData.unit] : [])
+      ));
+      data.append('customUnits', JSON.stringify(customUnitsToSave));
       data.append('stock', parseInt(formData.stock) || 0);
       data.append('stockStatus', formData.stockStatus || 'Available');
       
@@ -416,6 +589,27 @@ const AddProduct = () => {
               <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <IndianRupee size={18} color="#22c55e" /> B2B Pricing
               </h3>
+              {(mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length > 0 || globalVariantCustomUnits.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => setShowManageUnitsModal(true)}
+                  style={{
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)',
+                    color: 'var(--primary, #6366f1)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Trash2 size={13} /> Manage Custom Units
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
@@ -447,16 +641,26 @@ const AddProduct = () => {
                   name="unit" 
                   className="input-field" 
                   value={formData.unit} 
-                  onChange={handleInputChange} 
+                  onChange={(e) => {
+                    if (e.target.value === '__ADD_CUSTOM__') {
+                      setMainCustomInput('');
+                      setMainCustomError('');
+                      setShowMainCustomModal(true);
+                    } else {
+                      handleInputChange(e);
+                    }
+                  }} 
                   required
                   style={{ height: '48px', cursor: 'pointer' }}
                 >
-                  <option value="pcs">pcs</option>
-                  <option value="g">g</option>
-                  <option value="kg">kg</option>
-                  <option value="ltr">ltr</option>
-                  <option value="ml">ml</option>
-                  <option value="bag">bag</option>
+                  <option value="BOX">BOX</option>
+                  <option value="BAG">BAG</option>
+                  {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').map(u => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                  <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
+                    + Custom
+                  </option>
                 </select>
               </div>
 
@@ -621,21 +825,38 @@ const AddProduct = () => {
                             step="0.01" 
                           />
                         </div>
-                        <div style={{ flex: 1, minWidth: '90px' }}>
+                        <div style={{ flex: 1.4, minWidth: '130px' }}>
                           <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Unit *</label>
                           <select 
                             className="input-field" 
                             value={variant.packetSizeUnit} 
-                            onChange={(e) => handleB2bChange(index, 'packetSizeUnit', e.target.value)} 
+                            onChange={(e) => {
+                              if (e.target.value === '__ADD_CUSTOM__') {
+                                setVariantCustomModalIndex(index);
+                                setVariantCustomInput('');
+                                setVariantCustomError('');
+                              } else {
+                                handleB2bChange(index, 'packetSizeUnit', e.target.value);
+                              }
+                            }} 
                             required
                             style={{ height: '45px', cursor: 'pointer' }}
                           >
+                            <option value="pcs">pcs</option>
                             <option value="g">g</option>
                             <option value="kg">kg</option>
                             <option value="ltr">ltr</option>
                             <option value="ml">ml</option>
-                            <option value="pcs">pcs</option>
                             <option value="bag">bag</option>
+                            {(variant.customUnitOptions || DEFAULT_VARIANT_UNITS)
+                              .filter(u => !['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'].includes(u) && !['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'].includes(u.toLowerCase()))
+                              .map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))
+                            }
+                            <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
+                              + Custom
+                            </option>
                           </select>
                         </div>
                         <div style={{ flex: 1.5, minWidth: '130px' }}>
@@ -887,6 +1108,487 @@ const AddProduct = () => {
             </button>
           </div>
         </form>
+
+        {/* Modal: Add Custom Unit for Main Unit Type */}
+        {showMainCustomModal && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px'
+          }}>
+            <div className="glass-card" style={{
+              maxWidth: '400px',
+              width: '100%',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-dark, #0f172a)'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
+                Add Custom Unit Type
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '16px' }}>
+                Enter custom unit type for main B2B pricing (e.g. CARTON, DRUM, TRAY).
+              </p>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="e.g. CARTON"
+                value={mainCustomInput}
+                onChange={(e) => {
+                  setMainCustomInput(e.target.value.toUpperCase());
+                  setMainCustomError('');
+                }}
+                autoFocus
+                style={{ height: '48px', textTransform: 'uppercase', marginBottom: '8px' }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddMainCustomUnit();
+                  }
+                }}
+              />
+              {mainCustomError && (
+                <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '12px', fontWeight: 500 }}>
+                  {mainCustomError}
+                </div>
+              )}
+
+              {unitDeleteFeedback.text && (
+                <div style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  marginBottom: '12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  background: unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                  color: unitDeleteFeedback.type === 'error' ? '#ef4444' : '#22c55e',
+                  border: `1px solid ${unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`
+                }}>
+                  {unitDeleteFeedback.text}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowMainCustomModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '10px',
+                    background: 'transparent',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-main)',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddMainCustomUnit}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '10px',
+                    background: 'var(--primary, #6366f1)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Add Unit
+                </button>
+              </div>
+
+              {/* Manage Existing Custom Main Units */}
+              {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length > 0 && (
+                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Custom Units ({mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
+                    {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').map(u => (
+                      <div key={u} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{u}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMainCustomUnit(u)}
+                          disabled={unitDeleteLoading}
+                          title={`Delete custom unit "${u}"`}
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: 'none',
+                            color: '#ef4444',
+                            padding: '6px',
+                            borderRadius: '6px',
+                            cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Add Custom Unit for B2B Variant */}
+        {variantCustomModalIndex !== null && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px'
+          }}>
+            <div className="glass-card" style={{
+              maxWidth: '400px',
+              width: '100%',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-dark, #0f172a)'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
+                Add Custom Variant Unit
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '16px' }}>
+                Enter custom unit for Variant #{variantCustomModalIndex + 1} (e.g. PACKET, CAN, STRIP).
+              </p>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="e.g. PACKET"
+                value={variantCustomInput}
+                onChange={(e) => {
+                  setVariantCustomInput(e.target.value.toUpperCase());
+                  setVariantCustomError('');
+                }}
+                autoFocus
+                style={{ height: '48px', textTransform: 'uppercase', marginBottom: '8px' }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddVariantCustomUnit();
+                  }
+                }}
+              />
+              {variantCustomError && (
+                <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '12px', fontWeight: 500 }}>
+                  {variantCustomError}
+                </div>
+              )}
+
+              {unitDeleteFeedback.text && (
+                <div style={{
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  marginBottom: '12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  background: unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                  color: unitDeleteFeedback.type === 'error' ? '#ef4444' : '#22c55e',
+                  border: `1px solid ${unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`
+                }}>
+                  {unitDeleteFeedback.text}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setVariantCustomModalIndex(null)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '10px',
+                    background: 'transparent',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-main)',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddVariantCustomUnit}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '10px',
+                    background: 'var(--primary, #6366f1)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Add Unit
+                </button>
+              </div>
+
+              {/* Manage Existing Custom Variant Units for this variant row */}
+              {variantCustomModalIndex !== null && (() => {
+                const currentVariantOpts = b2bVariants[variantCustomModalIndex]?.customUnitOptions || DEFAULT_VARIANT_UNITS;
+                const customOnly = currentVariantOpts.filter(u => !DEFAULT_VARIANT_UNITS.includes(u) && !DEFAULT_VARIANT_UNITS.includes(u.toLowerCase()));
+                if (customOnly.length === 0) return null;
+                return (
+                  <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Custom Variant Units ({customOnly.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
+                      {customOnly.map(u => (
+                        <div key={u} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)'
+                        }}>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{u}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteVariantCustomUnit(variantCustomModalIndex, u)}
+                            disabled={unitDeleteLoading}
+                            title={`Delete custom variant unit "${u}"`}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: 'none',
+                              color: '#ef4444',
+                              padding: '6px',
+                              borderRadius: '6px',
+                              cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Standalone Custom Unit Management Interface */}
+        {showManageUnitsModal && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px'
+          }}>
+            <div className="glass-card" style={{
+              maxWidth: '480px',
+              width: '100%',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-dark, #0f172a)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Trash2 size={18} color="#ef4444" /> Custom Unit Management
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowManageUnitsModal(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-dim)',
+                    cursor: 'pointer',
+                    fontSize: '18px'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '16px' }}>
+                Manage custom units created for your store. Standard defaults (BOX, BAG, pcs, etc.) cannot be deleted.
+              </p>
+
+              {unitDeleteFeedback.text && (
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  marginBottom: '16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  background: unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                  color: unitDeleteFeedback.type === 'error' ? '#ef4444' : '#22c55e',
+                  border: `1px solid ${unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`
+                }}>
+                  {unitDeleteFeedback.text}
+                </div>
+              )}
+
+              {/* Main Custom Units */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Main B2B Custom Units ({mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length})
+                </div>
+                {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length === 0 ? (
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '8px 0' }}>
+                    No custom main units added yet.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '140px', overflowY: 'auto' }}>
+                    {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').map(u => (
+                      <div key={u} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <div>
+                          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{u}</span>
+                          {formData.unit === u && (
+                            <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--primary, #6366f1)', fontWeight: 600 }}>
+                              (Currently Selected)
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMainCustomUnit(u)}
+                          disabled={unitDeleteLoading}
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '12px',
+                            fontWeight: 600
+                          }}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Variant Custom Units */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Variant Custom Units ({globalVariantCustomUnits.length})
+                </div>
+                {globalVariantCustomUnits.length === 0 ? (
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '8px 0' }}>
+                    No custom variant units added yet.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '140px', overflowY: 'auto' }}>
+                    {globalVariantCustomUnits.map(u => (
+                      <div key={u} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{u}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteVariantCustomUnit(null, u)}
+                          disabled={unitDeleteLoading}
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '12px',
+                            fontWeight: 600
+                          }}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowManageUnitsModal(false)}
+                  className="btn-primary"
+                  style={{
+                    padding: '10px 24px',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
