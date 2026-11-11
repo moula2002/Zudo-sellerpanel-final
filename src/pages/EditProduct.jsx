@@ -18,7 +18,8 @@ import {
   RefreshCcw,
   Trash2,
   Plus,
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import Layout from '../components/Layout';
 
@@ -52,11 +53,21 @@ const EditProduct = () => {
   const [previews, setPreviews] = useState({ image: null });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const navigate = useNavigate();
   const [calcQuantity, setCalcQuantity] = useState(1);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!id || id === 'undefined' || id === 'null') {
+        setFetchError('Invalid product ID');
+        setFetching(false);
+        return;
+      }
+
+      setFetching(true);
+      setFetchError(null);
+
       try {
         const [catRes, productRes, commRes] = await Promise.all([
           api.get('/categories'),
@@ -86,7 +97,7 @@ const EditProduct = () => {
           b2bPrice: p.b2bPrice ? String(p.b2bPrice) : (p.price ? String(p.price) : ''),
           commissionType: commType,
           commissionValue: commVal,
-          moq: p.moq ? String(p.moq) : '1',
+          moq: (p.moq !== undefined && p.moq !== null) ? String(p.moq) : ((p.maxOrderQuantity !== undefined && p.maxOrderQuantity !== null) ? String(p.maxOrderQuantity) : '1'),
           unit: p.unit || 'pcs',
           categoryId: p.categoryId?._id || p.categoryId || '',
           subCategoryId: p.subCategoryId?._id || p.subCategoryId || '',
@@ -128,7 +139,8 @@ const EditProduct = () => {
         }
       } catch (err) {
         console.error('Failed to fetch data:', err);
-        alert('Failed to load product details');
+        const errorMsg = err.response?.data?.message || (err.response?.status === 404 ? 'Product not found or has been deleted.' : 'Failed to load product details');
+        setFetchError(errorMsg);
       } finally {
         setFetching(false);
       }
@@ -237,6 +249,41 @@ const EditProduct = () => {
     <Layout>
       <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
         <div className="animate-spin"><Package size={40} color="#6366f1" /></div>
+      </div>
+    </Layout>
+  );
+
+  if (fetchError) return (
+    <Layout>
+      <div style={{ maxWidth: '600px', margin: '80px auto', textAlign: 'center', padding: '40px 24px' }}>
+        <div className="glass-card" style={{ padding: '40px', borderRadius: '24px', border: '1px solid var(--border-color)' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <AlertCircle size={32} />
+          </div>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '10px' }}>
+            Product Unavailable
+          </h2>
+          <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginBottom: '28px', lineHeight: '1.6' }}>
+            {fetchError}
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+            <button
+              onClick={() => navigate('/products')}
+              style={{
+                padding: '12px 28px',
+                borderRadius: '12px',
+                background: 'var(--primary)',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              Back to Products
+            </button>
+          </div>
+        </div>
       </div>
     </Layout>
   );
