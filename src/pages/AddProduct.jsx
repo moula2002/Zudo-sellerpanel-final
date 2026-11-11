@@ -81,7 +81,10 @@ const AddProduct = () => {
         setSellers(sells.data || []);
 
         if (customRes.data?.mainUnits && Array.isArray(customRes.data.mainUnits)) {
-          setMainUnitOptions(prev => Array.from(new Set([...prev, ...customRes.data.mainUnits])));
+          const filteredUnits = customRes.data.mainUnits
+            .map(u => String(u || '').trim().toUpperCase())
+            .filter(u => u && u !== 'KG' && u !== 'PCS' && u !== 'BOX' && u !== 'BAG');
+          setMainUnitOptions(prev => Array.from(new Set(['BOX', 'BAG', ...prev, ...filteredUnits])).filter(u => u !== 'KG' && u !== 'PCS'));
         }
         if (customRes.data?.variantUnits && Array.isArray(customRes.data.variantUnits)) {
           setGlobalVariantCustomUnits(customRes.data.variantUnits);

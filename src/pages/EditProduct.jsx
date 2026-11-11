@@ -110,14 +110,17 @@ const EditProduct = () => {
           ? String(p.commissionValue)
           : '2';
 
-        const loadedUnit = (p.unit || 'BOX').toString().trim().toUpperCase();
+        const rawLoadedUnit = (p.unit || 'BOX').toString().trim().toUpperCase();
+        // If the legacy product had 'KG' or 'PCS' as unit, normalize it to 'BOX' unless it was BOX or BAG or custom
+        const loadedUnit = (rawLoadedUnit === 'KG' || rawLoadedUnit === 'PCS') ? 'BOX' : rawLoadedUnit;
         const loadedCustom = Array.isArray(p.customUnits)
-          ? p.customUnits.map(u => String(u || '').trim().toUpperCase()).filter(Boolean)
+          ? p.customUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && u !== 'KG' && u !== 'PCS' && u !== 'BOX' && u !== 'BAG')
           : [];
         const globalCustom = Array.isArray(customRes.data?.mainUnits)
-          ? customRes.data.mainUnits.map(u => String(u || '').trim().toUpperCase()).filter(Boolean)
+          ? customRes.data.mainUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && u !== 'KG' && u !== 'PCS' && u !== 'BOX' && u !== 'BAG')
           : [];
-        const mergedMainOptions = Array.from(new Set(['BOX', 'BAG', ...loadedCustom, ...globalCustom, loadedUnit]));
+        const mergedMainOptions = Array.from(new Set(['BOX', 'BAG', ...loadedCustom, ...globalCustom, loadedUnit]))
+          .filter(u => u !== 'KG' && u !== 'PCS');
         setMainUnitOptions(mergedMainOptions);
 
         setFormData({
