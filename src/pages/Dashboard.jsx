@@ -89,7 +89,13 @@ const Dashboard = () => {
 
         const serverStats = statsRes.data || {};
         const productsList = Array.isArray(productsRes.data) ? productsRes.data : [];
-        const lowStockFromProducts = productsList.filter(p => (parseInt(p.stock) || 0) <= 5);
+        const getEffectiveStock = (p) => {
+          if (p.b2b && p.b2b.length > 0) {
+            return p.b2b.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+          }
+          return parseInt(p.stock) || 0;
+        };
+        const lowStockFromProducts = productsList.filter(p => getEffectiveStock(p) <= 5);
 
         setStats({
           totalProducts: serverStats.totalProducts !== undefined ? serverStats.totalProducts : productsList.length,
@@ -233,7 +239,11 @@ const Dashboard = () => {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444' }}>{product.stock} left</div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444' }}>
+                        {product.b2b && product.b2b.length > 0
+                          ? product.b2b.reduce((s, v) => s + (Number(v.stock) || 0), 0)
+                          : (product.stock || 0)} left
+                      </div>
                       <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>STOCK LOW</div>
                     </div>
                   </div>
