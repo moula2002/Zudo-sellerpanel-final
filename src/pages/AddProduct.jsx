@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { uploadApi } from '../utils/api';
-import { calculateCustomerPrice } from '../utils/pricing';
+import { calculateCustomerPrice, calculateB2bPricing } from '../utils/pricing';
 import { 
   Package, 
   ArrowLeft, 
@@ -313,12 +313,17 @@ const AddProduct = () => {
     }
   };
 
-  // Live calculation of Customer Wholesale Prices (Seller Price + GST, with 0 Commission)
+  // Live calculation of Customer Wholesale Prices using standard B2B pricing utility
   const sellerB2bVal = parseFloat(formData.sellerB2bPrice) || 0;
-  const b2bCalculation = calculateCustomerPrice(sellerB2bVal, 'flat', 0);
+  const unitSizeNum = parseFloat(formData.unitSize) || 1;
   const gstNum = parseFloat(formData.gstPercent) || 0;
-  const b2bGstAmount = (sellerB2bVal * gstNum) / 100;
-  const b2bTotalWithGst = sellerB2bVal + b2bGstAmount;
+  const b2bPricing = calculateB2bPricing({
+    basePrice: sellerB2bVal,
+    unitSize: unitSizeNum,
+    gstRate: gstNum,
+    quantity: 1
+  });
+  const b2bCalculation = calculateCustomerPrice(sellerB2bVal, 'flat', 0);
 
   // Resolve display name for the current seller
   const resolvedSellerName = 
@@ -863,17 +868,29 @@ const AddProduct = () => {
                   <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 700, letterSpacing: '0.5px', marginBottom: '10px' }}>
                     B2B WHOLESALE PRICING
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-dim)', fontWeight: 600, opacity: 0.85 }}>Base Price:</span>
-                    <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{sellerB2bVal.toFixed(2)}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Seller Price Per Base Unit:</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{sellerB2bVal.toFixed(2)} / {(formData.measurementUnit || 'KG').toUpperCase()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Package Specification:</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>1 {(formData.unit || 'BOX').toUpperCase()} = {unitSizeNum} {(formData.measurementUnit || 'KG').toUpperCase()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Seller Price Per {(formData.unit || 'BOX').toUpperCase()}:</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{b2bPricing.sellerPricePerPackage.toFixed(2)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                    <span style={{ color: 'var(--text-dim)', fontWeight: 600, opacity: 0.85 }}>GST ({gstNum}%):</span>
-                    <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>₹{b2bGstAmount.toFixed(2)}</span>
+                    <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Total Seller Price (1 {(formData.unit || 'BOX').toUpperCase()}):</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{b2bPricing.totalSellerPrice.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
+                    <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Applicable GST ({gstNum}%):</span>
+                    <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>+₹{b2bPricing.gstAmount.toFixed(2)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid var(--border-color)', fontSize: '15px' }}>
-                    <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Total Price (incl. GST):</span>
-                    <span style={{ color: '#16a34a', fontWeight: 800, fontSize: '17px' }}>₹{b2bTotalWithGst.toFixed(2)}</span>
+                    <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Total Customer Price (including GST):</span>
+                    <span style={{ color: '#16a34a', fontWeight: 800, fontSize: '17px' }}>₹{b2bPricing.totalCustomerPrice.toFixed(2)}</span>
                   </div>
                 </div>
               </div>

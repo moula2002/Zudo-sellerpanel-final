@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api, { uploadApi, IMAGE_BASE_URL, getImageUrl } from '../utils/api';
-import { findCategoryCommission, calculateCustomerPrice } from '../utils/pricing';
+import { findCategoryCommission, calculateCustomerPrice, calculateB2bPricing } from '../utils/pricing';
 import {
   Package,
   ChevronLeft,
@@ -427,10 +427,22 @@ const EditProduct = () => {
 
   const selectedCategory = categories.find(c => String(c._id) === String(formData.categoryId));
   const gstPercentNum = Number(formData.gstPercent) || 0;
+  const currentUnitSize = parseFloat(formData.unitSize) > 0 ? parseFloat(formData.unitSize) : 1;
 
-  const b2bSellerBase = sellerB2bVal * calcQuantity;
-  const b2bGstAmount = (b2bSellerBase * gstPercentNum) / 100;
-  const b2bPriceTotal = b2bSellerBase + b2bGstAmount;
+  // Shared package pricing calculation:
+  // sellerPricePerPackage = basePrice × unitSize
+  // gstAmount = sellerPricePerPackage × (gstRate / 100)
+  // customerPricePerPackage = sellerPricePerPackage + gstAmount
+  const pricingBreakdown = calculateB2bPricing({
+    basePrice: sellerB2bVal,
+    unitSize: currentUnitSize,
+    gstRate: gstPercentNum,
+    quantity: calcQuantity
+  });
+
+  const b2bSellerBase = pricingBreakdown.totalSellerPrice;
+  const b2bGstAmount = pricingBreakdown.totalGstAmount;
+  const b2bPriceTotal = pricingBreakdown.totalCustomerPrice;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -898,11 +910,19 @@ const EditProduct = () => {
 
                   <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Seller Unit Price:</span>
-                      <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{sellerB2bVal.toFixed(2)} / {formData.unit || 'unit'}</span>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Seller Price Per Base Unit:</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{sellerB2bVal.toFixed(2)} / {(formData.measurementUnit || 'KG').toUpperCase()}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Package Specification:</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>1 {(formData.unit || 'BOX').toUpperCase()} = {currentUnitSize} {(formData.measurementUnit || 'KG').toUpperCase()}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Seller Price Per {(formData.unit || 'BOX').toUpperCase()}:</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{pricingBreakdown.sellerPricePerPackage.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Total Seller Price ({calcQuantity} {formData.unit}):</span>
+                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Total Seller Price ({calcQuantity} {(formData.unit || 'BOX').toUpperCase()}):</span>
                       <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{b2bSellerBase.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
@@ -910,7 +930,7 @@ const EditProduct = () => {
                       <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>+₹{b2bGstAmount.toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid var(--border-color)', fontSize: '15px' }}>
-                      <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Total Price (incl. GST):</span>
+                      <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Total Customer Price (including GST):</span>
                       <span style={{ color: '#16a34a', fontWeight: 800, fontSize: '17px' }}>₹{b2bPriceTotal.toFixed(2)}</span>
                     </div>
                   </div>

@@ -66,11 +66,46 @@ export function calculateCustomerPrice(sellerPrice, commissionType = 'flat', com
 }
 
 /**
- * Calculate pricing breakdown for any quantity.
+ * Standard shared calculation for B2B Package Pricing across Seller Panel:
  * Formula:
- * - Total Seller Price = Seller Unit Price × Quantity
- * - Total Commission = Flat Commission Per Unit × Quantity
- * - Final Customer Price = Total Seller Price + Total Commission + Applicable GST
+ * - sellerPricePerPackage = basePrice × unitSize
+ * - gstAmount = sellerPricePerPackage × (gstRate / 100)
+ * - customerPricePerPackage = sellerPricePerPackage + gstAmount
+ */
+export function calculateB2bPricing({
+  basePrice = 0,
+  unitSize = 1,
+  gstRate = 0,
+  quantity = 1
+}) {
+  const bPrice = parseFloat(basePrice) || 0;
+  const uSize = parseFloat(unitSize) > 0 ? parseFloat(unitSize) : 1;
+  const gst = parseFloat(gstRate) || 0;
+  const qty = Number(quantity) > 0 ? Number(quantity) : 1;
+
+  const sellerPricePerPackage = parseFloat((bPrice * uSize).toFixed(2));
+  const totalSellerPrice = parseFloat((sellerPricePerPackage * qty).toFixed(2));
+  const gstAmountPerPackage = parseFloat((sellerPricePerPackage * (gst / 100)).toFixed(2));
+  const totalGstAmount = parseFloat((totalSellerPrice * (gst / 100)).toFixed(2));
+  const customerPricePerPackage = parseFloat((sellerPricePerPackage + gstAmountPerPackage).toFixed(2));
+  const totalCustomerPrice = parseFloat((totalSellerPrice + totalGstAmount).toFixed(2));
+
+  return {
+    basePrice: bPrice,
+    unitSize: uSize,
+    gstRate: gst,
+    quantity: qty,
+    sellerPricePerPackage,
+    totalSellerPrice,
+    gstAmountPerPackage,
+    totalGstAmount,
+    customerPricePerPackage,
+    totalCustomerPrice
+  };
+}
+
+/**
+ * Calculate pricing breakdown for any quantity.
  */
 export function calculatePricingBreakdown({
   sellerUnitPrice = 0,
