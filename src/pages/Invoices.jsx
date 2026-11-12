@@ -22,6 +22,10 @@ const Invoices = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
+  // Authenticated Image Blobs Cache (invoiceId -> blobUrl)
+  const [imageBlobs, setImageBlobs] = useState({});
+  const [imageLoading, setImageLoading] = useState({});
+
   // Modal State for Invoice Details & Image View
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -37,6 +41,17 @@ const Invoices = () => {
     fetchNextSequence();
   }, []);
 
+  // Clean up blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(imageBlobs).forEach(url => {
+        if (url && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [imageBlobs]);
+
   const fetchNextSequence = async () => {
     try {
       const { data } = await api.get('/seller-invoices/next-number');
@@ -44,7 +59,6 @@ const Invoices = () => {
         setNextExpectedNumber(data.nextExpectedNumber || 1);
         setLastInvoiceNumber(data.lastInvoiceNumber || null);
         setUsedNumbers(data.usedNumbers || []);
-        // Pre-fill next sequential number if field is blank
         if (!invoiceNumber) {
           setInvoiceNumber(String(data.nextExpectedNumber || 1));
         }
@@ -57,11 +71,36 @@ const Invoices = () => {
   const fetchInvoices = async () => {
     try {
       const { data } = await api.get('/seller-invoices/my-invoices');
-      setInvoices(data);
+      setInvoices(data || []);
+      // Prefetch images for invoices with images using the authenticated Axios instance
+      (data || []).forEach(inv => {
+        if (inv.hasInvoiceImage || inv.invoiceImage) {
+          loadAuthenticatedImage(inv._id);
+        }
+      });
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Safely loads the raw binary image via the authenticated Axios instance (with Bearer token & x-location)
+  const loadAuthenticatedImage = async (invoiceId) => {
+    if (!invoiceId || imageBlobs[invoiceId] || imageLoading[invoiceId]) return;
+
+    setImageLoading(prev => ({ ...prev, [invoiceId]: true }));
+    try {
+      const res = await api.get(`/seller-invoices/${invoiceId}/image`, {
+        responseType: 'blob'
+      });
+      const blobUrl = URL.createObjectURL(res.data);
+      setImageBlobs(prev => ({ ...prev, [invoiceId]: blobUrl }));
+    } catch (err) {
+      // 404 or image missing is normal for records without images
+      console.warn(`Could not load image for invoice ${invoiceId}:`, err.response?.status || err.message);
+    } finally {
+      setImageLoading(prev => ({ ...prev, [invoiceId]: false }));
     }
   };
 
@@ -75,7 +114,6 @@ const Invoices = () => {
       return;
     }
 
-    // 10MB limit
     if (file.size > 10 * 1024 * 1024) {
       setError('Image size exceeds 10MB. Please choose a smaller image.');
       return;
@@ -195,25 +233,44 @@ const Invoices = () => {
   };
 
   const handleDelete = async (invoice) => {
-    const invNumberStr = invoice.invoiceNumber ? `#${invoice.invoiceNumber}` : `#${invoice._id.toString().substring(0, 8)}`;
+    const invId = invoice._id;
+    const invNumberStr = invoice.invoiceNumber ? `#${invoice.invoiceNumber}` : `#${invId.toString().substring(0, 8)}`;
     const confirmDelete = window.confirm(`Are you sure you want to delete Invoice ${invNumberStr}? This action cannot be undone.`);
     if (!confirmDelete) return;
 
-    setDeletingId(invoice._id);
+    setDeletingId(invId);
     setError('');
     setSuccessMsg('');
+
+    // Immediately close modal if deleting from inside modal
+    if (selectedInvoice && selectedInvoice._id === invId) {
+      setShowModal(false);
+      setSelectedInvoice(null);
+    }
+
     try {
-      await api.delete(`/seller-invoices/${invoice._id}`);
-      setSuccessMsg(`Invoice ${invNumberStr} was deleted successfully.`);
-      if (selectedInvoice && selectedInvoice._id === invoice._id) {
-        setShowModal(false);
-        setSelectedInvoice(null);
+      await api.delete(`/seller-invoices/${invId}`);
+
+      // Clean up cached blob URL for deleted invoice
+      if (imageBlobs[invId]) {
+        URL.revokeObjectURL(imageBlobs[invId]);
+        setImageBlobs(prev => {
+          const updated = { ...prev };
+          delete updated[invId];
+          return updated;
+        });
       }
-      await fetchInvoices();
+
+      // Optimistically remove from frontend list
+      setInvoices(prev => prev.filter(item => item._id !== invId));
+      setSuccessMsg(`Invoice ${invNumberStr} was deleted successfully.`);
+
+      // Update sequence info
       await fetchNextSequence();
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to delete invoice.';
       setError(msg);
+      await fetchInvoices(); // restore list on error
     } finally {
       setDeletingId(null);
     }
@@ -222,11 +279,9 @@ const Invoices = () => {
   const openInvoiceDetails = async (invoice) => {
     setSelectedInvoice(invoice);
     setShowModal(true);
-  };
-
-  const getImageUrl = (invoiceId) => {
-    const token = localStorage.getItem('zudo_seller_token');
-    return `${BASE_URL}/seller-invoices/${invoiceId}/image?token=${token || ''}`;
+    if ((invoice.hasInvoiceImage || invoice.invoiceImage) && !imageBlobs[invoice._id]) {
+      loadAuthenticatedImage(invoice._id);
+    }
   };
 
   return (
@@ -530,7 +585,8 @@ const Invoices = () => {
               </tr>
             ) : invoices.map((inv) => {
               const hasImg = inv.hasInvoiceImage || Boolean(inv.invoiceImage);
-              const invoiceDisplayNum = inv.invoiceNumber || `#${inv._id.toString().substring(0,8).toUpperCase()}`;
+              const blobUrl = imageBlobs[inv._id];
+              const isLoadingImg = imageLoading[inv._id];
 
               return (
                 <tr key={inv._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -555,7 +611,9 @@ const Invoices = () => {
                     {hasImg ? (
                       <div 
                         onClick={() => {
-                          setImageModalUrl(getImageUrl(inv._id));
+                          if (blobUrl) {
+                            setImageModalUrl(blobUrl);
+                          }
                         }}
                         style={{
                           width: '44px',
@@ -563,35 +621,43 @@ const Invoices = () => {
                           borderRadius: '8px',
                           overflow: 'hidden',
                           border: '1px solid rgba(59, 130, 246, 0.3)',
-                          cursor: 'pointer',
+                          cursor: blobUrl ? 'pointer' : 'default',
                           position: 'relative',
-                          background: 'rgba(0,0,0,0.2)'
-                        }}
-                        title="Click to view full invoice image"
-                      >
-                        <img 
-                          src={getImageUrl(inv._id)} 
-                          alt="Invoice" 
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                        <div style={{
-                          position: 'absolute',
-                          inset: 0,
-                          background: 'rgba(0,0,0,0.3)',
+                          background: 'rgba(0,0,0,0.2)',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          opacity: 0,
-                          transition: 'opacity 0.2s ease'
+                          justifyContent: 'center'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = 0}
-                        >
-                          <Eye size={14} color="#fff" />
-                        </div>
+                        title={blobUrl ? "Click to view full invoice image" : "Loading invoice image..."}
+                      >
+                        {blobUrl ? (
+                          <>
+                            <img 
+                              src={blobUrl} 
+                              alt="Invoice" 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <div style={{
+                              position: 'absolute',
+                              inset: 0,
+                              background: 'rgba(0,0,0,0.3)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: 0,
+                              transition: 'opacity 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                            onMouseLeave={(e) => e.currentTarget.style.opacity = 0}
+                            >
+                              <Eye size={14} color="#fff" />
+                            </div>
+                          </>
+                        ) : isLoadingImg ? (
+                          <RefreshCw size={14} className="animate-spin" style={{ color: '#3b82f6' }} />
+                        ) : (
+                          <ImageIcon size={16} style={{ color: 'var(--text-dim)' }} />
+                        )}
                       </div>
                     ) : (
                       <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontStyle: 'italic' }}>
@@ -778,24 +844,33 @@ const Invoices = () => {
                   background: '#09090b',
                   textAlign: 'center'
                 }}>
-                  <img 
-                    src={getImageUrl(selectedInvoice._id)} 
-                    alt={`Invoice #${selectedInvoice.invoiceNumber}`} 
-                    style={{ width: '100%', maxHeight: '360px', objectFit: 'contain', display: 'block' }}
-                  />
+                  {imageBlobs[selectedInvoice._id] ? (
+                    <img 
+                      src={imageBlobs[selectedInvoice._id]} 
+                      alt={`Invoice #${selectedInvoice.invoiceNumber}`} 
+                      style={{ width: '100%', maxHeight: '360px', objectFit: 'contain', display: 'block' }}
+                    />
+                  ) : (
+                    <div style={{ padding: '40px', textAlign: 'center' }}>
+                      <RefreshCw size={24} className="animate-spin" style={{ color: '#3b82f6', margin: '0 auto 8px', display: 'block' }} />
+                      <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Loading invoice copy...</span>
+                    </div>
+                  )}
                   <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
                       {selectedInvoice.imageMetadata?.originalName || 'Invoice Image'}
                     </span>
-                    <a 
-                      href={getImageUrl(selectedInvoice._id)} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="btn-secondary"
-                      style={{ padding: '4px 10px', fontSize: '11px', textDecoration: 'none' }}
-                    >
-                      <ExternalLink size={12} /> Open Full Size
-                    </a>
+                    {imageBlobs[selectedInvoice._id] && (
+                      <a 
+                        href={imageBlobs[selectedInvoice._id]} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="btn-secondary"
+                        style={{ padding: '4px 10px', fontSize: '11px', textDecoration: 'none' }}
+                      >
+                        <ExternalLink size={12} /> Open Full Size
+                      </a>
+                    )}
                   </div>
                 </div>
               ) : (
