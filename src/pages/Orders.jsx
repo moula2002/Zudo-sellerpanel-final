@@ -271,6 +271,11 @@ const Orders = () => {
                       <span style={{ color: '#22c55e', marginLeft: '6px', fontSize: '11px' }}>• Cust: ₹{item.price}</span>
                     )}
                   </div>
+                  {item.unitSize && item.unitSize !== 1 && (
+                    <div style={{ fontSize: '11px', color: '#6366f1', marginTop: '2px', fontWeight: 600 }}>
+                      Unit Size: {item.unitSize} {item.unit || ''} &bull; Total: {item.totalProductWeight || (item.unitSize * item.quantity)} {item.unit || ''}
+                    </div>
+                  )}
                 </div>
                 <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
                   ₹{item.normalPrice !== undefined && item.normalPrice !== null ? (item.quantity * item.normalPrice) : (item.netTotal !== undefined ? item.netTotal : (item.quantity * item.price))}

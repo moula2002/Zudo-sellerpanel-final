@@ -32,7 +32,9 @@ const EditProduct = () => {
     commissionType: 'flat',
     commissionValue: '2',
     moq: '1',
-    unit: 'pcs',
+    unit: 'kg',
+    measurementUnit: 'kg',
+    unitSize: '1',
     categoryId: '',
     subCategoryId: '',
     stock: '',
@@ -87,7 +89,9 @@ const EditProduct = () => {
           commissionType: commType,
           commissionValue: commVal,
           moq: p.moq ? String(p.moq) : '1',
-          unit: p.unit || 'pcs',
+          unit: p.unit || 'kg',
+          measurementUnit: p.measurementUnit || (['bag', 'tin'].includes(p.unit) ? 'kg' : (p.unit || 'kg')),
+          unitSize: p.unitSize !== undefined ? String(p.unitSize) : '1',
           categoryId: p.categoryId?._id || p.categoryId || '',
           subCategoryId: p.subCategoryId?._id || p.subCategoryId || '',
           stock: p.stock !== undefined ? String(p.stock) : '',
@@ -196,9 +200,19 @@ const EditProduct = () => {
         .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
         .map(v => {
           const sPrice = parseFloat(v.sellerPrice || v.price) || 0;
+          const uSize = parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1;
+          const mUnit = v.packetSizeUnit || formData.measurementUnit || formData.unit || 'kg';
+          const pType = formData.packagingType || formData.unit || 'pack';
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
+            sizeValue: parseFloat(v.packetSizeVal) || 1,
+            unitSize: uSize,
+            measurementUnit: mUnit,
+            packagingType: pType,
             sellerPrice: sPrice,
+            sellerPricePerProductUnit: sPrice,
+            sellerPricePerBaseUnit: uSize > 0 ? Math.round((sPrice / uSize) * 100) / 100 : sPrice,
+            isPackagePrice: true,
             price: sPrice,
             stock: parseInt(v.stock) || 0
           };
@@ -210,6 +224,7 @@ const EditProduct = () => {
 
       await api.put(`/products/${id}`, {
         ...formData,
+        unitSize: parseFloat(formData.unitSize) || 1,
         subCategoryId: cleanSubCategoryId,
         sellerB2bPrice: sellerB2bVal,
         b2bPrice: sellerB2bVal,
@@ -385,21 +400,64 @@ const EditProduct = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Unit Type</label>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Packaging / Unit Type *</label>
                   <select
                     className="input-field"
                     value={formData.unit}
-                    onChange={e => setFormData(prev => ({ ...prev, unit: e.target.value }))}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const autoMeas = ['kg', 'ton', 'ltr', 'g', 'ml', 'pcs'].includes(val) ? val : (formData.measurementUnit || 'kg');
+                      setFormData(prev => ({ ...prev, unit: val, measurementUnit: autoMeas }));
+                    }}
                     required
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
-                    <option value="pcs">pcs</option>
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-                    <option value="ltr">ltr</option>
-                    <option value="ml">ml</option>
-                    <option value="bag">bag</option>
+                    <option value="kg">KG</option>
+                    <option value="bag">Bag</option>
+                    <option value="tin">Tin</option>
+                    <option value="ton">Ton</option>
+                    <option value="ltr">Litre</option>
+                    <option value="pcs">Pcs</option>
+                    <option value="g">Gram (g)</option>
+                    <option value="ml">ML</option>
                   </select>
+                </div>
+
+                {['bag', 'tin', 'custom'].includes(formData.unit) && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                      Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
+                    </label>
+                    <select
+                      className="input-field"
+                      value={formData.measurementUnit || 'kg'}
+                      onChange={e => setFormData(prev => ({ ...prev, measurementUnit: e.target.value }))}
+                      required
+                      style={{ height: '50px', cursor: 'pointer' }}
+                    >
+                      <option value="kg">KG</option>
+                      <option value="ltr">Litre</option>
+                      <option value="g">Gram (g)</option>
+                      <option value="ton">Ton</option>
+                      <option value="pcs">Piece</option>
+                    </select>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} {formData.unit})</span>
+                  </label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    placeholder="e.g. 30"
+                    value={formData.unitSize}
+                    onChange={e => setFormData({ ...formData, unitSize: e.target.value })}
+                    required
+                    min="0.01"
+                    step="any"
+                  />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

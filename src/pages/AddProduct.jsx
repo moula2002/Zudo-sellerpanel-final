@@ -40,7 +40,9 @@ const AddProduct = () => {
     commissionValue: 0,
     gstPercent: 0,
     moq: 1,
-    unit: 'pcs',
+    unit: 'kg',
+    measurementUnit: 'kg',
+    unitSize: 1,
     sellerId: '',
     stock: 0,
     stockStatus: 'Available',
@@ -189,6 +191,7 @@ const AddProduct = () => {
       data.append('gstPercent', gstNum);
       data.append('moq', parseInt(formData.moq) || 1);
       data.append('unit', formData.unit);
+      data.append('unitSize', parseFloat(formData.unitSize) || 1);
       data.append('stock', parseInt(formData.stock) || 0);
       data.append('stockStatus', formData.stockStatus || 'Available');
       
@@ -211,9 +214,19 @@ const AddProduct = () => {
         .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
         .map(v => {
           const sPrice = parseFloat(v.sellerPrice || v.price) || 0;
+          const uSize = parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1;
+          const mUnit = v.packetSizeUnit || formData.measurementUnit || formData.unit || 'kg';
+          const pType = formData.packagingType || formData.unit || 'pack';
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
+            sizeValue: parseFloat(v.packetSizeVal) || 1,
+            unitSize: uSize,
+            measurementUnit: mUnit,
+            packagingType: pType,
             sellerPrice: sPrice,
+            sellerPricePerProductUnit: sPrice,
+            sellerPricePerBaseUnit: uSize > 0 ? Math.round((sPrice / uSize) * 100) / 100 : sPrice,
+            isPackagePrice: true,
             price: sPrice,
             stock: parseInt(v.stock) || 0
           };
@@ -441,23 +454,68 @@ const AddProduct = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
-                  Unit Type *
+                  Packaging / Unit Type *
                 </label>
                 <select 
                   name="unit" 
                   className="input-field" 
                   value={formData.unit} 
-                  onChange={handleInputChange} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const autoMeas = ['kg', 'ton', 'ltr', 'g', 'ml', 'pcs'].includes(val) ? val : (formData.measurementUnit || 'kg');
+                    setFormData({ ...formData, unit: val, measurementUnit: autoMeas });
+                  }} 
                   required
                   style={{ height: '48px', cursor: 'pointer' }}
                 >
-                  <option value="pcs">pcs</option>
-                  <option value="g">g</option>
-                  <option value="kg">kg</option>
-                  <option value="ltr">ltr</option>
-                  <option value="ml">ml</option>
-                  <option value="bag">bag</option>
+                  <option value="kg">KG</option>
+                  <option value="bag">Bag</option>
+                  <option value="tin">Tin</option>
+                  <option value="ton">Ton</option>
+                  <option value="ltr">Litre</option>
+                  <option value="pcs">Pcs</option>
+                  <option value="g">Gram (g)</option>
+                  <option value="ml">ML</option>
                 </select>
+              </div>
+
+              {['bag', 'tin', 'custom'].includes(formData.unit) && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
+                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
+                  </label>
+                  <select 
+                    name="measurementUnit" 
+                    className="input-field" 
+                    value={formData.measurementUnit || 'kg'} 
+                    onChange={handleInputChange} 
+                    required
+                    style={{ height: '48px', cursor: 'pointer' }}
+                  >
+                    <option value="kg">KG</option>
+                    <option value="ltr">Litre</option>
+                    <option value="g">Gram (g)</option>
+                    <option value="ton">Ton</option>
+                    <option value="pcs">Piece</option>
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
+                  Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} {formData.unit})</span>
+                </label>
+                <input 
+                  type="number" 
+                  name="unitSize" 
+                  className="input-field" 
+                  value={formData.unitSize} 
+                  onChange={handleInputChange} 
+                  required 
+                  min="0.01" 
+                  step="any" 
+                  placeholder="e.g. 30"
+                />
               </div>
 
               <div>
