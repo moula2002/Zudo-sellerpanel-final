@@ -449,11 +449,20 @@ const EditProduct = () => {
       const formattedB2b = b2bVariants
         .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
         .map(v => {
-          const rawPrice = parseFloat(v.sellerPrice || v.price) || 0;
+          let rawPrice = parseFloat(v.sellerPrice || v.price) || 0;
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
           const vPriceBasis = v.priceBasis || formData.priceBasis || 'per_unit';
+
+          // Sync with base product seller price if this variant matches base packaging & unit size
+          if (uSize === (parseFloat(formData.unitSize) || 1) && pType === (formData.packagingType || formData.unit || 'BAG').toUpperCase()) {
+            const baseFormPrice = parseFloat(formData.sellerB2bPrice || formData.price) || 0;
+            if (baseFormPrice > 0) {
+              rawPrice = baseFormPrice;
+            }
+          }
+
           const isPkg = vPriceBasis === 'per_package';
           const pkgPrice = isPkg ? rawPrice : Math.round(rawPrice * uSize * 100) / 100;
           const basePrice = isPkg ? (uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice) : rawPrice;
