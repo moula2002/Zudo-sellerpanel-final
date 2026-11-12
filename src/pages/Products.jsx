@@ -440,15 +440,8 @@ const Products = () => {
                             ? Number(product.b2b[0].sellerPrice)
                             : Number(product.b2bPrice || product.price || 0))));
 
-              const pricing = calculateB2bPricing({
-                basePrice: isPackage ? (rawBase / uSize) : rawBase,
-                unitSize: uSize,
-                gstRate: displayGstRate,
-                quantity: 1
-              });
-
-              const packageSellerPrice = product.sellerPricePerProductUnit || product.sellerPricePerPackage || pricing.sellerPricePerPackage;
-              const customerPriceWithGst = product.customerPricePerPackage || product.customerFinalPricePerProductUnit || pricing.customerPricePerPackage;
+              const baseSellerPrice = isPackage ? (rawBase / uSize) : rawBase;
+              const baseCustomerPrice = baseSellerPrice + (baseSellerPrice * displayGstRate) / 100;
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -474,14 +467,11 @@ const Products = () => {
                   </td>
                   <td style={{ padding: '16px 20px' }}>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
-                      ₹{packageSellerPrice}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
-                      ₹{packageSellerPrice} / {product.packagingType || product.unit || 'BOX'}
+                      ₹{baseSellerPrice}
                     </div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>₹{customerPriceWithGst.toFixed(2)}</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>₹{baseCustomerPrice.toFixed(2)}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
                       {displayGstRate}% GST
                     </div>
@@ -597,15 +587,8 @@ const Products = () => {
                         ? Number(product.b2b[0].sellerPrice)
                         : Number(product.b2bPrice || product.price || 0))));
 
-          const pricing = calculateB2bPricing({
-            basePrice: isPackage ? (rawBase / uSize) : rawBase,
-            unitSize: uSize,
-            gstRate: displayGstRate,
-            quantity: 1
-          });
-
-          const packageSellerPrice = product.sellerPricePerProductUnit || product.sellerPricePerPackage || pricing.sellerPricePerPackage;
-          const customerPriceWithGst = product.customerPricePerPackage || product.customerFinalPricePerProductUnit || pricing.customerPricePerPackage;
+          const baseSellerPrice = isPackage ? (rawBase / uSize) : rawBase;
+          const baseCustomerPrice = baseSellerPrice + (baseSellerPrice * displayGstRate) / 100;
 
           return (
             <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', gap: '16px' }}>
@@ -622,8 +605,8 @@ const Products = () => {
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>{product.categoryId?.name}</div>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600 }}>Seller: <strong style={{ fontWeight: 800 }}>₹{packageSellerPrice}</strong></span>
-                  <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 800 }}>Customer: ₹{customerPriceWithGst.toFixed(2)}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600 }}>Seller: <strong style={{ fontWeight: 800 }}>₹{baseSellerPrice}</strong></span>
+                  <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 800 }}>Customer: ₹{baseCustomerPrice.toFixed(2)}</span>
                   <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--text-main)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase' }}>
                     {product.packagingType || product.unit || 'BOX'}
                   </span>

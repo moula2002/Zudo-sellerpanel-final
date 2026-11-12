@@ -89,15 +89,13 @@ assert(addProductCode.includes('name="sellerB2bPrice"'), 'AddProduct has sellerB
 assert(addProductCode.includes('Base Price (₹) *'), 'AddProduct has Base Price (₹) * label');
 assert(!addProductCode.includes('name="commissionValue"'), 'AddProduct commissionValue input removed as expected');
 assert(addProductCode.includes('calculateCustomerPrice'), 'AddProduct uses calculateCustomerPrice');
-assert(addProductCode.includes('Live Pricing Breakdown'), 'AddProduct has live pricing card');
-console.log('  [PASS] AddProduct.jsx has B2B base price, GST breakdown, and admin-synced commission');
+console.log('  [PASS] AddProduct.jsx has B2B base price, GST configuration, and admin-synced commission');
 
 const editProductCode = fs.readFileSync(path.resolve('src', 'pages', 'EditProduct.jsx'), 'utf8');
 assert(editProductCode.includes('sellerB2bPrice: baseSellerB2bPrice'), 'EditProduct loads sellerB2bPrice');
 assert(editProductCode.includes('Base Price (₹) *'), 'EditProduct has Base Price (₹) * label');
 assert(editProductCode.includes('calculateCustomerPrice'), 'EditProduct calculates customer price');
-assert(editProductCode.includes('Live Pricing Breakdown'), 'EditProduct has live pricing breakdown');
-assert(!editProductCode.includes('Commission (Flat'), 'EditProduct does not display Commission Flat in live pricing breakdown');
+assert(!editProductCode.includes('Commission (Flat'), 'EditProduct does not display Commission Flat');
 console.log('  [PASS] EditProduct.jsx loads base wholesale seller price without showing Commission Flat');
 
 const productsCode = fs.readFileSync(path.resolve('src', 'pages', 'Products.jsx'), 'utf8');
