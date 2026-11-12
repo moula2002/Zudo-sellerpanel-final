@@ -31,6 +31,7 @@ const Invoices = () => {
   const [showModal, setShowModal] = useState(false);
   const [imageModalUrl, setImageModalUrl] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
@@ -218,17 +219,41 @@ const Invoices = () => {
   };
 
   const handleDownload = async (id, invNum) => {
+    if (!id || downloadingId) return;
+    setDownloadingId(id);
+    setError('');
+
     try {
-      const response = await api.get(`/seller-invoices/${id}/download`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const response = await api.get(`/seller-invoices/${id}/download`, { 
+        responseType: 'blob' 
+      });
+
+      // Verify blob content
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `Invoice_${invNum || id}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      alert('Failed to download invoice');
+      console.error('Download error:', err);
+      // Attempt to decode error response if returned as blob
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          setError(json.message || 'Failed to download invoice PDF.');
+        } catch (e) {
+          setError('Failed to download invoice PDF. Please try again.');
+        }
+      } else {
+        setError(err.response?.data?.message || 'Failed to download invoice PDF.');
+      }
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -706,11 +731,20 @@ const Invoices = () => {
                       </button>
                       <button 
                         onClick={() => handleDownload(inv._id, inv.invoiceNumber)}
+                        disabled={downloadingId === inv._id}
                         className="btn-primary"
                         style={{ padding: '6px 14px', fontSize: '12px', height: 'auto', gap: '6px' }}
                         title="Download PDF"
                       >
-                        <Download size={14} /> PDF
+                        {downloadingId === inv._id ? (
+                          <>
+                            <RefreshCw size={14} className="animate-spin" /> Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download size={14} /> PDF
+                          </>
+                        )}
                       </button>
                       <button 
                         onClick={() => handleDelete(inv)}
@@ -916,10 +950,19 @@ const Invoices = () => {
                 </button>
                 <button 
                   onClick={() => handleDownload(selectedInvoice._id, selectedInvoice.invoiceNumber)}
+                  disabled={downloadingId === selectedInvoice._id}
                   className="btn-primary"
                   style={{ padding: '10px 20px', gap: '6px' }}
                 >
-                  <Download size={16} /> Download PDF
+                  {downloadingId === selectedInvoice._id ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" /> Generating PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} /> Download PDF
+                    </>
+                  )}
                 </button>
               </div>
             </div>
