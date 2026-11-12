@@ -131,6 +131,26 @@ const EditProduct = () => {
         const loadedMeas = (p.measurementBasis || p.measurementUnit || 'KG').toUpperCase();
         const loadedPriceBasis = p.priceBasis || (p.isPackagePrice ? 'per_package' : 'per_unit');
 
+        let resolvedUnitSize = Number(p.unitSize);
+        if (!resolvedUnitSize || resolvedUnitSize <= 1) {
+          const firstB2b = (p.b2b && p.b2b[0]) || (p.variants && p.variants[0]);
+          if (firstB2b) {
+            const vs = Number(firstB2b.unitSize || firstB2b.sizeValue);
+            if (vs && vs > 1) resolvedUnitSize = vs;
+            else if (firstB2b.packetSize) {
+              const m = String(firstB2b.packetSize).match(/([0-9.]+)/);
+              if (m && parseFloat(m[1]) > 1) resolvedUnitSize = parseFloat(m[1]);
+            }
+          }
+          if (!resolvedUnitSize || resolvedUnitSize <= 1) {
+            const nameMatch = String(p.name || '').match(/([0-9.]+)\s*(kg|g|ltr|pcs|gm|kgs|ton|ml)/i);
+            if (nameMatch && parseFloat(nameMatch[1]) > 1) {
+              resolvedUnitSize = parseFloat(nameMatch[1]);
+            }
+          }
+        }
+        if (!resolvedUnitSize || resolvedUnitSize <= 0) resolvedUnitSize = 1;
+
         setFormData({
           name: p.name || '',
           description: p.description || '',
@@ -146,7 +166,7 @@ const EditProduct = () => {
           packagingType: loadedPackaging,
           measurementUnit: loadedMeas.toLowerCase(),
           measurementBasis: loadedMeas,
-          unitSize: p.unitSize !== undefined ? String(p.unitSize) : '1',
+          unitSize: String(resolvedUnitSize),
           categoryId: p.categoryId?._id || p.categoryId || '',
           subCategoryId: p.subCategoryId?._id || p.subCategoryId || '',
           stock: p.stock !== undefined ? String(p.stock) : '',
