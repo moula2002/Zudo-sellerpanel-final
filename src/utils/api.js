@@ -16,10 +16,12 @@ export const IMAGE_BASE_URL = PRODUCTION_DOMAIN;
 
 const api = axios.create({
   baseURL: BASE_URL,
+  timeout: 30000,
 });
 
 export const uploadApi = axios.create({
   baseURL: UPLOAD_URL,
+  timeout: 60000,
 });
 
 const setupInterceptors = (instance) => {
