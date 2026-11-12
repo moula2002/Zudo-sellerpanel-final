@@ -154,7 +154,7 @@ const AddProduct = () => {
       packetSizeVal: '', 
       packetSizeUnit: formData.measurementUnit || 'kg',
       packagingType: formData.unit || 'BAG',
-      priceBasis: formData.priceBasis || 'per_unit',
+      priceBasis: 'per_unit',
       customUnitOptions: Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustomUnits])),
       sellerPrice: '', 
       price: '', 
@@ -381,8 +381,8 @@ const AddProduct = () => {
       data.append('packagingType', (formData.packagingType || formData.unit || 'BAG').trim().toUpperCase());
       data.append('measurementBasis', (formData.measurementBasis || formData.measurementUnit || 'KG').trim().toUpperCase());
       data.append('measurementUnit', (formData.measurementBasis || formData.measurementUnit || 'KG').trim().toUpperCase());
-      data.append('priceBasis', formData.priceBasis || 'per_unit');
-      data.append('isPackagePrice', formData.priceBasis === 'per_package');
+      data.append('priceBasis', 'per_unit');
+      data.append('isPackagePrice', false);
       const customUnitsToSave = Array.from(new Set(
         mainUnitOptions
           .filter(u => u !== 'BOX' && u !== 'BAG')
@@ -415,10 +415,8 @@ const AddProduct = () => {
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
-          const vPriceBasis = v.priceBasis || formData.priceBasis || 'per_unit';
-          const isPkg = vPriceBasis === 'per_package';
-          const pkgPrice = isPkg ? rawPrice : Math.round(rawPrice * uSize * 100) / 100;
-          const basePrice = isPkg ? (uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice) : rawPrice;
+          const pkgPrice = Math.round(rawPrice * uSize * 100) / 100;
+          const basePrice = rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -426,8 +424,8 @@ const AddProduct = () => {
             measurementUnit: mUnit,
             measurementBasis: mUnit,
             packagingType: pType,
-            priceBasis: vPriceBasis,
-            isPackagePrice: isPkg,
+            priceBasis: 'per_unit',
+            isPackagePrice: false,
             sellerPrice: pkgPrice,
             sellerPricePerProductUnit: pkgPrice,
             sellerPricePerBaseUnit: basePrice,
@@ -671,34 +669,10 @@ const AddProduct = () => {
                   required 
                   min="0.01" 
                   step="0.01" 
-                  placeholder={formData.priceBasis === 'per_package' ? "e.g. 1500 (per package)" : "e.g. 50 (per base unit)"} 
+                  placeholder="e.g. 50 (per base unit)" 
                 />
                 <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
-                  {formData.priceBasis === 'per_package' 
-                    ? `Price per complete ${(formData.unit || 'package').toUpperCase()}` 
-                    : `Price per 1 ${(formData.measurementUnit || 'kg').toUpperCase()}`}
-                </span>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
-                  Price Calculation Basis *
-                </label>
-                <select 
-                  name="priceBasis" 
-                  className="input-field" 
-                  value={formData.priceBasis || 'per_unit'} 
-                  onChange={handleInputChange} 
-                  required
-                  style={{ height: '48px', cursor: 'pointer' }}
-                >
-                  <option value="per_unit">Method A – Base Measurement Unit Pricing (e.g. ₹50/KG)</option>
-                  <option value="per_package">Method B – Complete Package Pricing (e.g. ₹1,500/Bag)</option>
-                </select>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
-                  {formData.priceBasis === 'per_package' 
-                    ? 'Direct package price (not multiplied by unit size)' 
-                    : 'Multiplied by unit size to determine package price'}
+                  Price per 1 {(formData.measurementUnit || 'kg').toUpperCase()}
                 </span>
               </div>
 
@@ -802,10 +776,7 @@ const AddProduct = () => {
                 <div>
                   <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
                   <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
-                    {formData.priceBasis === 'per_package'
-                      ? `₹${Number(formData.sellerB2bPrice || 0).toFixed(2)} / ${(formData.unit || 'BAG').toUpperCase()} (Complete Package Price)`
-                      : `₹${(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / ${(formData.unit || 'BAG').toUpperCase()} (₹${Number(formData.sellerB2bPrice || 0)} × ${formData.unitSize || 1} ${(formData.measurementUnit || 'KG').toUpperCase()})`
-                    }
+                    ₹{(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()} (₹{Number(formData.sellerB2bPrice || 0)} × {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()})
                   </div>
                 </div>
               </div>
@@ -945,8 +916,7 @@ const AddProduct = () => {
                     const vUnitSize = parseFloat(variant.packetSizeVal) || 1;
                     const vPkgType = (variant.packagingType || formData.unit || 'BAG').toUpperCase();
                     const vMeas = (variant.packetSizeUnit || formData.measurementUnit || 'kg').toUpperCase();
-                    const vPriceBasis = variant.priceBasis || formData.priceBasis || 'per_unit';
-                    const vPkgPrice = vPriceBasis === 'per_package' ? vSellerPrice : (vSellerPrice * vUnitSize);
+                    const vPkgPrice = vSellerPrice * vUnitSize;
                     const vGstRate = variant.gstPercent !== undefined && variant.gstPercent !== '' ? parseFloat(variant.gstPercent) : gstNum;
                     const vTotalWithGst = vPkgPrice > 0 ? (vPkgPrice + (vPkgPrice * vGstRate) / 100) : 0;
 
@@ -1003,20 +973,6 @@ const AddProduct = () => {
                             </select>
                           </div>
 
-                          <div style={{ flex: 1.5, minWidth: '140px' }}>
-                            <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Price Basis *</label>
-                            <select 
-                              className="input-field" 
-                              value={variant.priceBasis || formData.priceBasis || 'per_unit'} 
-                              onChange={(e) => handleB2bChange(index, 'priceBasis', e.target.value)} 
-                              required
-                              style={{ height: '45px', cursor: 'pointer' }}
-                            >
-                              <option value="per_unit">Per Measurement Unit (₹/{vMeas})</option>
-                              <option value="per_package">Per Complete {vPkgType}</option>
-                            </select>
-                          </div>
-
                           <div style={{ flex: 1.2, minWidth: '110px' }}>
                             <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Price (₹) *</label>
                             <input 
@@ -1029,6 +985,9 @@ const AddProduct = () => {
                               step="0.01" 
                               required 
                             />
+                            <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px', display: 'block' }}>
+                              per {vMeas}
+                            </span>
                           </div>
 
                           <div style={{ flex: 0.8, minWidth: '80px' }}>

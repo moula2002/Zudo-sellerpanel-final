@@ -56,7 +56,7 @@ const Login = () => {
     localStorage.removeItem('zudo_seller_token');
 
     try {
-      const locObj = locations.find(l => l.name === selectedLocation);
+      const locObj = locations.find(l => l.name === selectedLocation || l.dbName === selectedLocation);
       const dbLocation = locObj?.dbName || selectedLocation;
 
       const { data } = await api.post('/sellers/login', {
@@ -78,7 +78,8 @@ const Login = () => {
         navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password');
+      const errorMsg = err.response?.data?.message || err.message || 'Invalid email or password';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

@@ -259,7 +259,7 @@ const EditProduct = () => {
       packetSizeVal: '', 
       packetSizeUnit: formData.measurementUnit || 'kg',
       packagingType: formData.unit || 'BAG',
-      priceBasis: formData.priceBasis || 'per_unit',
+      priceBasis: 'per_unit',
       customUnitOptions: Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustomUnits])),
       sellerPrice: '', 
       price: '', 
@@ -453,8 +453,6 @@ const EditProduct = () => {
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
-          const vPriceBasis = v.priceBasis || formData.priceBasis || 'per_unit';
-
           // Sync with base product seller price if this variant matches base packaging & unit size
           if (uSize === (parseFloat(formData.unitSize) || 1) && pType === (formData.packagingType || formData.unit || 'BAG').toUpperCase()) {
             const baseFormPrice = parseFloat(formData.sellerB2bPrice || formData.price) || 0;
@@ -463,9 +461,8 @@ const EditProduct = () => {
             }
           }
 
-          const isPkg = vPriceBasis === 'per_package';
-          const pkgPrice = isPkg ? rawPrice : Math.round(rawPrice * uSize * 100) / 100;
-          const basePrice = isPkg ? (uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice) : rawPrice;
+          const pkgPrice = Math.round(rawPrice * uSize * 100) / 100;
+          const basePrice = rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -473,8 +470,8 @@ const EditProduct = () => {
             measurementUnit: mUnit,
             measurementBasis: mUnit,
             packagingType: pType,
-            priceBasis: vPriceBasis,
-            isPackagePrice: isPkg,
+            priceBasis: 'per_unit',
+            isPackagePrice: false,
             sellerPrice: pkgPrice,
             sellerPricePerProductUnit: pkgPrice,
             sellerPricePerBaseUnit: basePrice,
@@ -500,8 +497,8 @@ const EditProduct = () => {
         packagingType: (formData.packagingType || formData.unit || 'BAG').toUpperCase(),
         measurementBasis: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
         measurementUnit: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
-        priceBasis: formData.priceBasis || 'per_unit',
-        isPackagePrice: formData.priceBasis === 'per_package',
+        priceBasis: 'per_unit',
+        isPackagePrice: false,
         unitSize: parseFloat(formData.unitSize) || 1,
         customUnits: customUnitsToSave,
         subCategoryId: cleanSubCategoryId,
@@ -691,7 +688,7 @@ const EditProduct = () => {
                       type="number"
                       className="input-field"
                       style={{ paddingLeft: '42px' }}
-                      placeholder={formData.priceBasis === 'per_package' ? "e.g. 1500 (per package)" : "e.g. 50 (per base unit)"}
+                      placeholder="e.g. 50 (per base unit)"
                       value={formData.sellerB2bPrice}
                       onChange={e => setFormData({ ...formData, sellerB2bPrice: e.target.value })}
                       required
@@ -700,26 +697,7 @@ const EditProduct = () => {
                     />
                   </div>
                   <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                    {formData.priceBasis === 'per_package' 
-                      ? `Price per complete ${(formData.unit || 'package').toUpperCase()}` 
-                      : `Price per 1 ${(formData.measurementUnit || 'kg').toUpperCase()}`}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Price Calculation Basis *</label>
-                  <select
-                    className="input-field"
-                    value={formData.priceBasis || 'per_unit'}
-                    onChange={e => setFormData({ ...formData, priceBasis: e.target.value })}
-                    required
-                    style={{ height: '50px', cursor: 'pointer' }}
-                  >
-                    <option value="per_unit">Method A – Base Measurement Unit Pricing (e.g. ₹50/KG)</option>
-                    <option value="per_package">Method B – Complete Package Pricing (e.g. ₹1,500/Bag)</option>
-                  </select>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                    {formData.priceBasis === 'per_package' ? 'Direct package price (not multiplied)' : 'Multiplied by unit size to compute package price'}
+                    Price per 1 {(formData.measurementUnit || 'kg').toUpperCase()}
                   </span>
                 </div>
 
@@ -833,10 +811,7 @@ const EditProduct = () => {
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
-                      {formData.priceBasis === 'per_package'
-                        ? `₹${Number(formData.sellerB2bPrice || 0).toFixed(2)} / ${(formData.unit || 'BAG').toUpperCase()} (Complete Package Price)`
-                        : `₹${(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / ${(formData.unit || 'BAG').toUpperCase()} (₹${Number(formData.sellerB2bPrice || 0)} × ${formData.unitSize || 1} ${(formData.measurementUnit || 'KG').toUpperCase()})`
-                      }
+                      ₹{(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()} (₹{Number(formData.sellerB2bPrice || 0)} × {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()})
                     </div>
                   </div>
                 </div>
@@ -957,8 +932,7 @@ const EditProduct = () => {
                       const vUnitSize = parseFloat(variant.packetSizeVal) || 1;
                       const vPkgType = (variant.packagingType || formData.unit || 'BAG').toUpperCase();
                       const vMeas = (variant.packetSizeUnit || formData.measurementUnit || 'kg').toUpperCase();
-                      const vPriceBasis = variant.priceBasis || formData.priceBasis || 'per_unit';
-                      const vPkgPrice = vPriceBasis === 'per_package' ? vSeller : (vSeller * vUnitSize);
+                      const vPkgPrice = vSeller * vUnitSize;
                       const vGstRate = variant.gstPercent !== undefined && variant.gstPercent !== '' ? parseFloat(variant.gstPercent) : gstPercentNum;
                       const vTotalWithGst = vPkgPrice > 0 ? (vPkgPrice + (vPkgPrice * vGstRate) / 100) : 0;
 
@@ -1016,20 +990,6 @@ const EditProduct = () => {
                               </select>
                             </div>
 
-                            <div style={{ flex: 1.5, minWidth: '140px' }}>
-                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Price Basis *</label>
-                              <select 
-                                className="input-field" 
-                                value={variant.priceBasis || formData.priceBasis || 'per_unit'} 
-                                onChange={(e) => handleB2bChange(index, 'priceBasis', e.target.value)} 
-                                required
-                                style={{ height: '48px', cursor: 'pointer' }}
-                              >
-                                <option value="per_unit">Per Measurement Unit (₹/{vMeas})</option>
-                                <option value="per_package">Per Complete {vPkgType}</option>
-                              </select>
-                            </div>
-
                             <div style={{ flex: 1.2, minWidth: '110px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Price (₹) *</label>
                               <input 
@@ -1043,6 +1003,9 @@ const EditProduct = () => {
                                 required 
                                 style={{ height: '48px' }}
                               />
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px', display: 'block' }}>
+                                per {vMeas}
+                              </span>
                             </div>
 
                             <div style={{ flex: 0.8, minWidth: '80px' }}>

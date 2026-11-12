@@ -225,15 +225,24 @@ const Invoices = () => {
 
     try {
       const response = await api.get(`/seller-invoices/${id}/download`, { 
-        responseType: 'blob' 
+        responseType: 'blob',
+        withCredentials: true 
       });
+
+      // Check if the response is actually an error JSON encoded as blob
+      if (response.data && response.data.type === 'application/json') {
+        const text = await response.data.text();
+        const json = JSON.parse(text);
+        throw new Error(json.message || 'Failed to download invoice PDF.');
+      }
 
       // Verify blob content
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Invoice_${invNum || id}.pdf`);
+      link.download = `Invoice-${invNum || id}.pdf`;
+      link.setAttribute('download', `Invoice-${invNum || id}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
