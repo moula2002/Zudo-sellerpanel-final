@@ -3,6 +3,40 @@ import api, { getImageUrl } from '../utils/api';
 import { RefreshCcw, Search, User, MapPin, Package, AlertCircle, Calendar, ExternalLink, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 
+export const getReturnStatusConfig = (status) => {
+  const s = String(status || '').trim().toLowerCase();
+
+  if (s.includes('approved')) {
+    return {
+      bg: 'rgba(34, 197, 94, 0.14)',
+      color: '#15803d',
+      border: '1px solid rgba(34, 197, 94, 0.3)',
+      cardBg: 'rgba(34, 197, 94, 0.04)',
+      cardBorder: '#22c55e',
+      label: 'RETURN APPROVED',
+    };
+  }
+  if (s.includes('rejected')) {
+    return {
+      bg: 'rgba(148, 163, 184, 0.18)',
+      color: '#475569',
+      border: '1px solid rgba(148, 163, 184, 0.35)',
+      cardBg: 'rgba(148, 163, 184, 0.05)',
+      cardBorder: '#94a3b8',
+      label: 'RETURN REJECTED',
+    };
+  }
+  // Default to RETURN REQUESTED (Orange / Amber background, dark orange text)
+  return {
+    bg: 'rgba(245, 158, 11, 0.14)',
+    color: '#c2410c',
+    border: '1px solid rgba(245, 158, 11, 0.35)',
+    cardBg: 'rgba(245, 158, 11, 0.05)',
+    cardBorder: '#f59e0b',
+    label: s ? status.toUpperCase() : 'RETURN REQUESTED',
+  };
+};
+
 const Returns = () => {
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,16 +64,6 @@ const Returns = () => {
     return orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
            customerName.toLowerCase().includes(searchTerm.toLowerCase());
   });
-
-  const handleItemReturnAction = async (orderId, itemId, status) => {
-    try {
-      await api.put(`/orders/${orderId}/items/${itemId}/return-status`, { status });
-      fetchReturns();
-      setSelectedOrder(null);
-    } catch (error) {
-      alert('Failed to update return status');
-    }
-  };
 
   const ReturnDetailPanel = ({ order, onClose }) => {
     if (!order) return null;
@@ -73,7 +97,23 @@ const Returns = () => {
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>STATUS</div>
-              <div style={{ fontWeight: 700, fontSize: '14px', color: '#ef4444' }}>{order.orderStatus.toUpperCase()}</div>
+              {(() => {
+                const statusCfg = getReturnStatusConfig(order.orderStatus);
+                return (
+                  <span style={{ 
+                    padding: '4px 12px', 
+                    borderRadius: '20px', 
+                    fontSize: '12px', 
+                    fontWeight: 700, 
+                    background: statusCfg.bg, 
+                    color: statusCfg.color, 
+                    border: statusCfg.border, 
+                    display: 'inline-block' 
+                  }}>
+                    {order.orderStatus ? order.orderStatus.toUpperCase() : 'RETURN REQUESTED'}
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
@@ -92,70 +132,100 @@ const Returns = () => {
           </div>
         </div>
 
-        <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '16px' }}>Items to Return</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {order.items?.filter(item => item.returnStatus && item.returnStatus !== 'None').map((item, idx) => (
-            <div key={idx} style={{ 
-              display: 'flex', 
-              flexDirection: 'column',
-              gap: '12px', 
-              padding: '16px',
-              background: 'rgba(245, 158, 11, 0.05)',
-              border: '1px dashed #f59e0b',
-              borderRadius: '16px'
-            }}>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <img src={getImageUrl(item.image)} alt="" style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/48x48?text=No+Image'; }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600 }}>{item.name}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Qty: {item.quantity} × ₹{item.price}</div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b', marginTop: '4px' }}>Status: {item.returnStatus.toUpperCase()}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Items to Return</h3>
+          {(() => {
+            const returnedItems = order.items?.filter(item => item.returnStatus && item.returnStatus !== 'None') || [];
+            const totalReturnCost = returnedItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.price) || 0)), 0);
+            if (returnedItems.length > 0 && totalReturnCost > 0) {
+              return (
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', background: 'rgba(99, 102, 241, 0.1)', padding: '4px 10px', borderRadius: '8px' }}>
+                  Total: <span style={{ color: '#6366f1' }}>₹{totalReturnCost.toLocaleString('en-IN')}</span>
                 </div>
-              </div>
-              
-              <div style={{ fontSize: '13px', color: 'var(--text-dim)', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
-                <strong style={{ color: 'var(--text-main)' }}>Reason:</strong> {item.returnReason || 'No reason provided'}
-                {item.returnComment && <div style={{ marginTop: '8px' }}><strong style={{ color: 'var(--text-main)' }}>Comment:</strong> {item.returnComment}</div>}
-                
-                {item.refundBankName && (
-                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>Refund Bank Details</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <div><strong style={{ color: 'var(--text-main)' }}>Bank:</strong> {item.refundBankName}</div>
-                      <div><strong style={{ color: 'var(--text-main)' }}>A/C Name:</strong> {item.refundAccountName}</div>
-                      <div><strong style={{ color: 'var(--text-main)' }}>A/C No:</strong> {item.refundAccountNumber}</div>
-                      <div><strong style={{ color: 'var(--text-main)' }}>IFSC:</strong> {item.refundIfscCode}</div>
+              );
+            }
+            return null;
+          })()}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {order.items?.filter(item => item.returnStatus && item.returnStatus !== 'None').map((item, idx) => {
+            const qty = Number(item.quantity) || 0;
+            const unitPrice = Number(item.price) || 0;
+            const totalCost = qty * unitPrice;
+            const itemCfg = getReturnStatusConfig(item.returnStatus);
+
+            return (
+              <div key={idx} style={{ 
+                display: 'flex', 
+                flexDirection: 'column',
+                gap: '12px', 
+                padding: '16px',
+                background: itemCfg.cardBg,
+                border: '1px dashed ' + itemCfg.cardBorder,
+                borderRadius: '16px'
+              }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <img src={getImageUrl(item.image)} alt="" style={{ width: '56px', height: '56px', borderRadius: '10px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/56x56?text=No+Image'; }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{item.name}</div>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '6px', fontSize: '13px', color: 'var(--text-dim)' }}>
+                      <div>Qty: <strong style={{ color: 'var(--text-main)' }}>{qty}</strong></div>
+                      <div>•</div>
+                      <div>Unit Price: <strong style={{ color: 'var(--text-main)' }}>₹{unitPrice.toLocaleString('en-IN')}</strong></div>
+                    </div>
+
+                    <div style={{ 
+                      marginTop: '8px', 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      padding: '8px 12px', 
+                      background: 'rgba(255, 255, 255, 0.04)', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255, 255, 255, 0.08)' 
+                    }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Total Product Cost
+                      </span>
+                      <span style={{ fontSize: '15px', fontWeight: 800, color: '#22c55e' }}>
+                        ₹{totalCost.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '8px' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: '16px', fontSize: '11px', fontWeight: 700, background: itemCfg.bg, color: itemCfg.color, border: itemCfg.border, display: 'inline-block' }}>
+                        Status: {item.returnStatus.toUpperCase()}
+                      </span>
                     </div>
                   </div>
+                </div>
+                
+                <div style={{ fontSize: '13px', color: 'var(--text-dim)', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+                  <strong style={{ color: 'var(--text-main)' }}>Reason:</strong> {item.returnReason || 'No reason provided'}
+                  {item.returnComment && <div style={{ marginTop: '8px' }}><strong style={{ color: 'var(--text-main)' }}>Comment:</strong> {item.returnComment}</div>}
+                  
+                  {item.refundBankName && (
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>Refund Bank Details</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div><strong style={{ color: 'var(--text-main)' }}>Bank:</strong> {item.refundBankName}</div>
+                        <div><strong style={{ color: 'var(--text-main)' }}>A/C Name:</strong> {item.refundAccountName}</div>
+                        <div><strong style={{ color: 'var(--text-main)' }}>A/C No:</strong> {item.refundAccountNumber}</div>
+                        <div><strong style={{ color: 'var(--text-main)' }}>IFSC:</strong> {item.refundIfscCode}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {item.returnImage && (
+                  <a href={getImageUrl(item.returnImage)} target="_blank" rel="noopener noreferrer">
+                    <img src={getImageUrl(item.returnImage)} alt="Return proof" style={{ width: '100px', height: '100px', borderRadius: '8px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x100?text=No+Image'; }} />
+                  </a>
                 )}
               </div>
-
-              {item.returnImage && (
-                <a href={getImageUrl(item.returnImage)} target="_blank" rel="noopener noreferrer">
-                  <img src={getImageUrl(item.returnImage)} alt="Return proof" style={{ width: '100px', height: '100px', borderRadius: '8px', objectFit: 'cover' }} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x100?text=No+Image'; }} />
-                </a>
-              )}
-              
-              {item.returnStatus === 'Return Requested' && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                  <button 
-                    onClick={() => handleItemReturnAction(order._id, item._id, 'Return Approved')} 
-                    className="btn-primary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '12px', background: '#10b981' }}
-                  >
-                    Approve
-                  </button>
-                  <button 
-                    onClick={() => handleItemReturnAction(order._id, item._id, 'Return Rejected')} 
-                    className="btn-primary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '12px', background: '#ef4444' }}
-                  >
-                    Reject
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -223,9 +293,14 @@ const Returns = () => {
                   </div>
                 </td>
                 <td style={{ padding: '16px 24px' }}>
-                  <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                    {order.orderStatus.toUpperCase()}
-                  </span>
+                  {(() => {
+                    const statusCfg = getReturnStatusConfig(order.orderStatus);
+                    return (
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: statusCfg.bg, color: statusCfg.color, border: statusCfg.border, display: 'inline-block', letterSpacing: '0.3px' }}>
+                        {order.orderStatus ? order.orderStatus.toUpperCase() : 'RETURN REQUESTED'}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td style={{ padding: '16px 24px' }}>
                   <button 

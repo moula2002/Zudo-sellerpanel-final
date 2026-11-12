@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import api, { uploadApi, IMAGE_BASE_URL, getImageUrl } from '../utils/api';
-import { ShoppingBag, Search, Filter, MoreHorizontal, Calendar, User, MapPin, ExternalLink, Clock, CheckCircle, Truck, XCircle, RefreshCcw, Download, FileText, Printer, Check, X, Upload, QrCode, Loader2 } from 'lucide-react';
+import api, { getImageUrl } from '../utils/api';
+import { ShoppingBag, Search, Filter, MoreHorizontal, Calendar, User, MapPin, ExternalLink, Clock, CheckCircle, Truck, XCircle, RefreshCcw, Download, FileText, Printer, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 
 const StatusBadge = ({ status }) => {
@@ -14,9 +14,25 @@ const StatusBadge = ({ status }) => {
     'Delivered': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', icon: CheckCircle },
     'Cancelled': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', icon: XCircle },
     'Rejected by Seller': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', icon: XCircle },
+    'Return Requested': { bg: 'rgba(245, 158, 11, 0.14)', color: '#c2410c', icon: RefreshCcw },
+    'RETURN REQUESTED': { bg: 'rgba(245, 158, 11, 0.14)', color: '#c2410c', icon: RefreshCcw },
+    'Return Approved': { bg: 'rgba(34, 197, 94, 0.14)', color: '#15803d', icon: CheckCircle },
+    'RETURN APPROVED': { bg: 'rgba(34, 197, 94, 0.14)', color: '#15803d', icon: CheckCircle },
+    'Return Rejected': { bg: 'rgba(148, 163, 184, 0.18)', color: '#475569', icon: XCircle },
+    'RETURN REJECTED': { bg: 'rgba(148, 163, 184, 0.18)', color: '#475569', icon: XCircle },
   };
 
-  const config = configs[status] || configs['Pending'];
+  const normalized = String(status || '').trim().toLowerCase();
+  let fallbackConfig = configs['Pending'];
+  if (normalized.includes('approved')) {
+    fallbackConfig = configs['RETURN APPROVED'];
+  } else if (normalized.includes('rejected')) {
+    fallbackConfig = configs['RETURN REJECTED'];
+  } else if (normalized.includes('requested') || normalized.includes('return')) {
+    fallbackConfig = configs['RETURN REQUESTED'];
+  }
+
+  const config = configs[status] || fallbackConfig;
   const Icon = config.icon || Clock;
 
   return (
@@ -91,46 +107,6 @@ const Orders = () => {
 
 
   const OrderDetailPanel = ({ order, onClose }) => {
-    const [uploadingQr, setUploadingQr] = useState(false);
-    const [qrCodeDoc, setQrCodeDoc] = useState(order.qrCodeDoc || '');
-    const [qrOption, setQrOption] = useState(order.qrOption || '');
-
-    const handleQrUpload = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      setUploadingQr(true);
-      const uploadData = new FormData();
-      uploadData.append('file', file);
-      try {
-        const { data } = await uploadApi.post('/upload', uploadData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        const fullUrl = `${IMAGE_BASE_URL}${data.url}`;
-        setQrCodeDoc(fullUrl);
-        await api.put(`/orders/${order._id}/qrcode`, { qrCodeDoc: fullUrl, qrOption });
-        // Update local state
-        order.qrCodeDoc = fullUrl;
-        order.qrOption = qrOption;
-        alert('QR Code saved for this order!');
-      } catch (err) {
-        console.error('QR upload error:', err);
-        alert('Failed to upload QR');
-      } finally {
-        setUploadingQr(false);
-      }
-    };
-
-    const handleSaveQrOption = async () => {
-      try {
-        await api.put(`/orders/${order._id}/qrcode`, { qrCodeDoc, qrOption });
-        order.qrCodeDoc = qrCodeDoc;
-        order.qrOption = qrOption;
-        alert('QR Option saved!');
-      } catch (e) {
-        alert('Failed to save QR option');
-      }
-    };
-
     if (!order) return null;
 
     return (
@@ -264,7 +240,22 @@ const Orders = () => {
                   onError={(e) => e.target.src = 'https://placehold.co/48'}
                 />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{item.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>{item.name}</div>
+                    {item.returnStatus && item.returnStatus !== 'None' && (
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        background: item.returnStatus.toLowerCase().includes('approved') ? 'rgba(34, 197, 94, 0.14)' : item.returnStatus.toLowerCase().includes('rejected') ? 'rgba(148, 163, 184, 0.18)' : 'rgba(245, 158, 11, 0.14)',
+                        color: item.returnStatus.toLowerCase().includes('approved') ? '#15803d' : item.returnStatus.toLowerCase().includes('rejected') ? '#475569' : '#c2410c',
+                        border: '1px solid ' + (item.returnStatus.toLowerCase().includes('approved') ? 'rgba(34, 197, 94, 0.3)' : item.returnStatus.toLowerCase().includes('rejected') ? 'rgba(148, 163, 184, 0.35)' : 'rgba(245, 158, 11, 0.35)')
+                      }}>
+                        {item.returnStatus.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
                     Qty: {item.quantity} × ₹{item.normalPrice !== undefined && item.normalPrice !== null ? item.normalPrice : (item.netPrice !== undefined ? item.netPrice : item.price)} (Seller Payout)
                     {item.price && item.normalPrice && item.price !== item.normalPrice && (
@@ -282,58 +273,6 @@ const Orders = () => {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* QR Code Upload Section */}
-        <div style={{ marginBottom: '32px', padding: '24px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '20px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}><QrCode size={18} color="#6366f1" /> Assign Payment QR to Order</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{
-              position: 'relative',
-              height: '100px',
-              border: '2px dashed rgba(99, 102, 241, 0.3)',
-              borderRadius: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: qrCodeDoc ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease'
-            }} onClick={() => document.getElementById('qrCodeUpload').click()}>
-              <input type="file" id="qrCodeUpload" hidden onChange={handleQrUpload} accept=".jpg,.jpeg,.png,.pdf" />
-              {uploadingQr ? (
-                <Loader2 className="animate-spin" size={24} color="#6366f1" />
-              ) : qrCodeDoc ? (
-                <>
-                  <div style={{ color: '#22c55e', marginBottom: '8px' }}><CheckCircle size={24} /></div>
-                  <div style={{ fontSize: '12px', color: '#22c55e', fontWeight: 600 }}>QR Code Assigned</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ color: '#6366f1', marginBottom: '8px' }}><Upload size={24} /></div>
-                  <div style={{ fontSize: '12px', color: '#64748b' }}>Click to upload QR Code</div>
-                </>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="QR Option / UPI ID (e.g. 9876543210@upi)"
-                value={qrOption}
-                onChange={e => setQrOption(e.target.value)}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
-              />
-              <button
-                onClick={handleSaveQrOption}
-                style={{ padding: '0 16px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 }}
-              >
-                Save
-              </button>
-            </div>
           </div>
         </div>
 

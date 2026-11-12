@@ -155,11 +155,11 @@ const ProductDetailModal = ({ product, onClose }) => {
               </div>
 
               <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>AVAILABLE STOCK</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: product.stock < 10 ? '#ef4444' : 'var(--text-main)' }}>
-                  {product.stock}
+                <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>MAX ORDER QTY</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>
+                  {product.moq || 1}
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>MOQ: {product.moq || 1}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>Maximum units</div>
               </div>
             </div>
 
@@ -477,23 +477,39 @@ const Products = () => {
                     </span>
                   </td>
                   <td style={{ padding: '16px 20px', fontSize: '13px' }}>
-                    <div style={{ color: (product.stockStatus === 'Out of Stock' || product.stock < 10) ? '#ef4444' : '#22c55e', fontWeight: 700, fontSize: '15px' }}>
-                      {product.stock}
-                    </div>
-                    {product.stockStatus && (
-                      <span style={{
-                        fontSize: '10px',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontWeight: 700,
-                        display: 'inline-block',
-                        marginTop: '4px',
-                        background: product.stockStatus === 'Out of Stock' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
-                        color: product.stockStatus === 'Out of Stock' ? '#ef4444' : '#22c55e'
-                      }}>
-                        {product.stockStatus}
-                      </span>
-                    )}
+                    {(() => {
+                      const hasVariants = product.b2b && product.b2b.length > 0;
+                      const totalVariantStock = hasVariants
+                        ? product.b2b.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+                        : (Number(product.stock) || 0);
+
+                      return (
+                        <div>
+                          <div style={{ color: totalVariantStock < 10 ? '#ef4444' : '#22c55e', fontWeight: 700, fontSize: '15px' }}>
+                            {totalVariantStock}
+                          </div>
+                          {hasVariants && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                              {product.b2b.length} {product.b2b.length === 1 ? 'Variant' : 'Variants'}
+                            </div>
+                          )}
+                          {product.stockStatus && (
+                            <span style={{
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontWeight: 700,
+                              display: 'inline-block',
+                              marginTop: '4px',
+                              background: (product.stockStatus === 'Out of Stock' || totalVariantStock === 0) ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                              color: (product.stockStatus === 'Out of Stock' || totalVariantStock === 0) ? '#ef4444' : '#22c55e'
+                            }}>
+                              {(product.stockStatus === 'Out of Stock' || totalVariantStock === 0) ? 'Out of Stock' : 'Available'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td style={{ padding: '16px 20px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -572,7 +588,17 @@ const Products = () => {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '12px', color: product.stock < 10 ? '#ef4444' : '#94a3b8' }}>{product.stock} {product.unit || 'units'} left</div>
+                  {(() => {
+                    const hasVariants = product.b2b && product.b2b.length > 0;
+                    const effectiveStock = hasVariants
+                      ? product.b2b.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+                      : (Number(product.stock) || 0);
+                    return (
+                      <div style={{ fontSize: '12px', color: effectiveStock < 10 ? '#ef4444' : '#94a3b8' }}>
+                        {effectiveStock} in stock {hasVariants ? `(${product.b2b.length} variants)` : ''}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>

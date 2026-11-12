@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
-import { FileText, Download, Plus, AlertCircle, Calendar } from 'lucide-react';
+import { FileText, Download, Plus, AlertCircle, Calendar, CheckCircle, RefreshCw } from 'lucide-react';
 import Layout from '../components/Layout';
 
 const Invoices = () => {
@@ -11,6 +11,7 @@ const Invoices = () => {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
     fetchInvoices();
@@ -29,13 +30,15 @@ const Invoices = () => {
 
   const handleGenerate = async (e) => {
     e.preventDefault();
+    if (generating) return;
     setError('');
+    setSuccessMsg('');
     
     if (!startDate || !endDate) {
       setError('Please select both start and end dates.');
       return;
     }
-    if (!invoiceNumber) {
+    if (!invoiceNumber || !invoiceNumber.trim()) {
       setError('Please enter your invoice number.');
       return;
     }
@@ -46,14 +49,20 @@ const Invoices = () => {
 
     setGenerating(true);
     try {
-      const { data } = await api.post('/seller-invoices/generate', { startDate, endDate, invoiceNumber });
-      setInvoices([data, ...invoices]);
+      const { data } = await api.post('/seller-invoices/generate', { 
+        startDate, 
+        endDate, 
+        invoiceNumber: invoiceNumber.trim() 
+      });
       setStartDate('');
       setEndDate('');
       setInvoiceNumber('');
-      alert('Invoice generated successfully and sent to Admin!');
+      const amountStr = (data.totalAmount !== undefined ? data.totalAmount : data.netAmount) || 0;
+      setSuccessMsg(`Invoice #${data.invoiceNumber || data._id} generated successfully for ₹${Number(amountStr).toLocaleString('en-IN')}!`);
+      await fetchInvoices();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to generate invoice. No orders found or date overlaps.');
+      const msg = err.response?.data?.message || err.message || 'Failed to generate invoice. No delivered orders found or date overlaps.';
+      setError(msg);
     } finally {
       setGenerating(false);
     }
@@ -91,6 +100,12 @@ const Invoices = () => {
             <span style={{ fontSize: '14px', fontWeight: 500 }}>{error}</span>
           </div>
         )}
+        {successMsg && (
+          <div style={{ padding: '16px', background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', borderRadius: '12px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CheckCircle size={18} />
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>{successMsg}</span>
+          </div>
+        )}
         <form onSubmit={handleGenerate} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '200px' }}>
             <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '8px' }}>START DATE</label>
@@ -123,7 +138,11 @@ const Invoices = () => {
             />
           </div>
           <button type="submit" className="btn-primary" disabled={generating} style={{ height: '48px', padding: '0 24px', whiteSpace: 'nowrap' }}>
-            {generating ? 'Generating...' : (
+            {generating ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <RefreshCw size={16} className="animate-spin" /> Generating...
+              </div>
+            ) : (
               <>
                 <Plus size={18} /> Generate
               </>
