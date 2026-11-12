@@ -452,29 +452,41 @@ const Products = () => {
                     <div style={{ fontSize: '11px', color: '#64748b' }}>{product.subCategoryId?.name || product.subCategory || ''}</div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>₹{sellerPrice}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>Seller Payout</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
+                      ₹{product.priceBasis === 'per_package' ? sellerPrice : (product.sellerPricePerProductUnit || (sellerPrice * (product.unitSize || 1)))}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
+                      {product.priceBasis === 'per_package'
+                        ? `₹${sellerPrice} / ${product.packagingType || product.unit || 'BAG'}`
+                        : `₹${sellerPrice} / ${(product.measurementBasis || product.measurementUnit || 'KG').toUpperCase()}`
+                      }
+                    </div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>₹{customerPriceWithGst.toFixed(2)}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
-                      ₹{sellerPrice} ({displayGstRate}% GST)
+                      {displayGstRate}% GST
                     </div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <span style={{ 
-                      fontSize: '12px', 
-                      fontWeight: 700, 
-                      color: 'var(--text-main)', 
-                      background: 'rgba(99, 102, 241, 0.1)', 
-                      padding: '4px 10px', 
-                      borderRadius: '8px', 
-                      border: '1px solid rgba(99, 102, 241, 0.2)',
-                      display: 'inline-block',
-                      textTransform: 'uppercase'
-                    }}>
-                      {product.unit || 'pcs'}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <span style={{ 
+                        fontSize: '12px', 
+                        fontWeight: 700, 
+                        color: 'var(--text-main)', 
+                        background: 'rgba(99, 102, 241, 0.1)', 
+                        padding: '4px 8px', 
+                        borderRadius: '8px', 
+                        border: '1px solid rgba(99, 102, 241, 0.2)',
+                        display: 'inline-block',
+                        textTransform: 'uppercase'
+                      }}>
+                        {product.packagingType || product.unit || 'BAG'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>
+                        1 {product.packagingType || product.unit || 'BAG'} = {product.unitSize || 1} {(product.measurementBasis || product.measurementUnit || 'KG').toUpperCase()}
+                      </span>
+                    </div>
                   </td>
                   <td style={{ padding: '16px 20px', fontSize: '13px' }}>
                     {(() => {

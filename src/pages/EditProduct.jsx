@@ -29,11 +29,14 @@ const EditProduct = () => {
     description: '',
     sellerB2bPrice: '',
     b2bPrice: '',
+    priceBasis: 'per_unit',
     commissionType: 'flat',
     commissionValue: '2',
     moq: '1',
-    unit: 'BOX',
+    unit: 'BAG',
+    packagingType: 'BAG',
     measurementUnit: 'kg',
+    measurementBasis: 'KG',
     unitSize: '1',
     categoryId: '',
     subCategoryId: '',
@@ -124,16 +127,25 @@ const EditProduct = () => {
           .filter(u => u !== 'KG' && u !== 'PCS');
         setMainUnitOptions(mergedMainOptions);
 
+        const loadedPackaging = (p.packagingType || loadedUnit || 'BAG').toUpperCase();
+        const loadedMeas = (p.measurementBasis || p.measurementUnit || 'KG').toUpperCase();
+        const loadedPriceBasis = p.priceBasis || (p.isPackagePrice ? 'per_package' : 'per_unit');
+
         setFormData({
           name: p.name || '',
           description: p.description || '',
-          sellerB2bPrice: baseSellerB2bPrice,
+          sellerB2bPrice: loadedPriceBasis === 'per_unit' && p.sellerPricePerBaseUnit !== undefined && p.sellerPricePerBaseUnit !== null
+            ? String(p.sellerPricePerBaseUnit)
+            : baseSellerB2bPrice,
           b2bPrice: p.b2bPrice ? String(p.b2bPrice) : (p.price ? String(p.price) : ''),
+          priceBasis: loadedPriceBasis,
           commissionType: commType,
           commissionValue: commVal,
           moq: (p.moq !== undefined && p.moq !== null) ? String(p.moq) : ((p.maxOrderQuantity !== undefined && p.maxOrderQuantity !== null) ? String(p.maxOrderQuantity) : '1'),
-          unit: loadedUnit,
-          measurementUnit: p.measurementUnit || (['bag', 'tin', 'box'].includes((loadedUnit || '').toLowerCase()) ? 'kg' : (loadedUnit || 'kg')),
+          unit: loadedPackaging,
+          packagingType: loadedPackaging,
+          measurementUnit: loadedMeas.toLowerCase(),
+          measurementBasis: loadedMeas,
           unitSize: p.unitSize !== undefined ? String(p.unitSize) : '1',
           categoryId: p.categoryId?._id || p.categoryId || '',
           subCategoryId: p.subCategoryId?._id || p.subCategoryId || '',
@@ -148,13 +160,13 @@ const EditProduct = () => {
         });
 
         const parsePacketSize = (sizeStr) => {
-          if (!sizeStr) return { val: '', unit: 'pcs' };
+          if (!sizeStr) return { val: '', unit: 'kg' };
           const valMatch = sizeStr.match(/^[\d\.]+/);
           const val = valMatch ? valMatch[0] : '';
           const unit = sizeStr.slice(val.length).trim();
           return {
             val,
-            unit: unit || 'pcs'
+            unit: unit || 'kg'
           };
         };
 
@@ -165,15 +177,23 @@ const EditProduct = () => {
 
         const parsedB2b = (p.b2b || []).map(v => {
           const parsed = parsePacketSize(v.packetSize);
-          const vSeller = v.sellerPrice !== undefined && v.sellerPrice !== null ? v.sellerPrice : (v.price || '');
-          const variantUnit = parsed.unit || 'pcs';
-          const variantOptions = Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustom, variantUnit]));
+          const vUnitSize = v.unitSize !== undefined && v.unitSize !== null ? String(v.unitSize) : (v.sizeValue ? String(v.sizeValue) : (parsed.val || '1'));
+          const vPriceBasis = v.priceBasis || loadedPriceBasis || 'per_unit';
+          const vSeller = vPriceBasis === 'per_unit' && v.sellerPricePerBaseUnit !== undefined && v.sellerPricePerBaseUnit !== null
+            ? String(v.sellerPricePerBaseUnit)
+            : (v.sellerPrice !== undefined && v.sellerPrice !== null ? String(v.sellerPrice) : (v.price ? String(v.price) : ''));
+          const variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'kg').toLowerCase();
+          const variantPkg = (v.packagingType || loadedPackaging || 'BAG').toUpperCase();
+          const variantOptions = Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustom, variantMeas]));
           return {
-            packetSizeVal: parsed.val,
-            packetSizeUnit: variantUnit,
+            packetSizeVal: vUnitSize,
+            packetSizeUnit: variantMeas,
+            packagingType: variantPkg,
+            priceBasis: vPriceBasis,
             customUnitOptions: variantOptions,
-            sellerPrice: vSeller ? String(vSeller) : '',
+            sellerPrice: vSeller,
             price: v.price ? String(v.price) : '',
+            gstPercent: v.gstPercent !== undefined && v.gstPercent !== null ? String(v.gstPercent) : (p.gstPercent ? String(p.gstPercent) : '0'),
             stock: v.stock !== undefined ? String(v.stock) : ''
           };
         });
@@ -217,10 +237,13 @@ const EditProduct = () => {
     ...b2bVariants, 
     { 
       packetSizeVal: '', 
-      packetSizeUnit: 'pcs', 
+      packetSizeUnit: formData.measurementUnit || 'kg',
+      packagingType: formData.unit || 'BAG',
+      priceBasis: formData.priceBasis || 'per_unit',
       customUnitOptions: Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustomUnits])),
       sellerPrice: '', 
       price: '', 
+      gstPercent: formData.gstPercent || 0,
       stock: '' 
     }
   ]);
@@ -406,22 +429,29 @@ const EditProduct = () => {
       const formattedB2b = b2bVariants
         .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
         .map(v => {
-          const sPrice = parseFloat(v.sellerPrice || v.price) || 0;
-          const uSize = parseFloat(v.packetSizeVal) || parseFloat(formData.unitSize) || 1;
-          const mUnit = v.packetSizeUnit || formData.measurementUnit || formData.unit || 'kg';
-          const pType = formData.packagingType || formData.unit || 'pack';
+          const rawPrice = parseFloat(v.sellerPrice || v.price) || 0;
+          const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
+          const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
+          const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
+          const vPriceBasis = v.priceBasis || formData.priceBasis || 'per_unit';
+          const isPkg = vPriceBasis === 'per_package';
+          const pkgPrice = isPkg ? rawPrice : Math.round(rawPrice * uSize * 100) / 100;
+          const basePrice = isPkg ? (uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice) : rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
-            sizeValue: parseFloat(v.packetSizeVal) || 1,
+            sizeValue: uSize,
             unitSize: uSize,
             measurementUnit: mUnit,
+            measurementBasis: mUnit,
             packagingType: pType,
-            sellerPrice: sPrice,
-            sellerPricePerProductUnit: sPrice,
-            sellerPricePerBaseUnit: uSize > 0 ? Math.round((sPrice / uSize) * 100) / 100 : sPrice,
-            isPackagePrice: true,
-            price: sPrice,
-            stock: parseInt(v.stock) || 0
+            priceBasis: vPriceBasis,
+            isPackagePrice: isPkg,
+            sellerPrice: pkgPrice,
+            sellerPricePerProductUnit: pkgPrice,
+            sellerPricePerBaseUnit: basePrice,
+            price: pkgPrice,
+            stock: parseInt(v.stock) || 0,
+            gstPercent: v.gstPercent !== undefined && v.gstPercent !== '' ? parseFloat(v.gstPercent) : gstPercentNum
           };
         });
 
@@ -437,7 +467,12 @@ const EditProduct = () => {
 
       await api.put(`/products/${id}`, {
         ...formData,
-        unit: formData.unit ? formData.unit.toUpperCase() : 'BOX',
+        unit: formData.unit ? formData.unit.toUpperCase() : 'BAG',
+        packagingType: (formData.packagingType || formData.unit || 'BAG').toUpperCase(),
+        measurementBasis: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
+        measurementUnit: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
+        priceBasis: formData.priceBasis || 'per_unit',
+        isPackagePrice: formData.priceBasis === 'per_package',
         unitSize: parseFloat(formData.unitSize) || 1,
         customUnits: customUnitsToSave,
         subCategoryId: cleanSubCategoryId,
@@ -627,7 +662,7 @@ const EditProduct = () => {
                       type="number"
                       className="input-field"
                       style={{ paddingLeft: '42px' }}
-                      placeholder="e.g. 2800"
+                      placeholder={formData.priceBasis === 'per_package' ? "e.g. 1500 (per package)" : "e.g. 50 (per base unit)"}
                       value={formData.sellerB2bPrice}
                       onChange={e => setFormData({ ...formData, sellerB2bPrice: e.target.value })}
                       required
@@ -635,9 +670,29 @@ const EditProduct = () => {
                       step="0.01"
                     />
                   </div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Your net wholesale payout price</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                    {formData.priceBasis === 'per_package' 
+                      ? `Price per complete ${(formData.unit || 'package').toUpperCase()}` 
+                      : `Price per 1 ${(formData.measurementUnit || 'kg').toUpperCase()}`}
+                  </span>
                 </div>
 
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Price Calculation Basis *</label>
+                  <select
+                    className="input-field"
+                    value={formData.priceBasis || 'per_unit'}
+                    onChange={e => setFormData({ ...formData, priceBasis: e.target.value })}
+                    required
+                    style={{ height: '50px', cursor: 'pointer' }}
+                  >
+                    <option value="per_unit">Method A – Base Measurement Unit Pricing (e.g. ₹50/KG)</option>
+                    <option value="per_package">Method B – Complete Package Pricing (e.g. ₹1,500/Bag)</option>
+                  </select>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                    {formData.priceBasis === 'per_package' ? 'Direct package price (not multiplied)' : 'Multiplied by unit size to compute package price'}
+                  </span>
+                </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>GST Rate (%)</label>
@@ -654,8 +709,6 @@ const EditProduct = () => {
                   />
                 </div>
 
-                
-
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Packaging / Unit Type *</label>
                   <select
@@ -669,47 +722,53 @@ const EditProduct = () => {
                       } else {
                         const val = e.target.value;
                         const autoMeas = ['kg', 'ton', 'ltr', 'g', 'ml', 'pcs'].includes(val.toLowerCase()) ? val.toLowerCase() : (formData.measurementUnit || 'kg');
-                        setFormData(prev => ({ ...prev, unit: val, measurementUnit: autoMeas }));
+                        setFormData(prev => ({ ...prev, unit: val, packagingType: val, measurementUnit: autoMeas, measurementBasis: autoMeas.toUpperCase() }));
                       }
                     }}
                     required
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
-                    <option value="BOX">BOX</option>
                     <option value="BAG">BAG</option>
-                    {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').map(u => (
+                    <option value="BOX">BOX</option>
+                    <option value="TIN">TIN</option>
+                    <option value="BOTTLE">BOTTLE</option>
+                    <option value="PACK">PACK</option>
+                    <option value="PIECE">PIECE</option>
+                    {mainUnitOptions.filter(u => !['BOX', 'BAG', 'TIN', 'BOTTLE', 'PACK', 'PIECE'].includes(u)).map(u => (
                       <option key={u} value={u}>{u}</option>
                     ))}
                     <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
-                      + Custom
+                      + Custom Packaging
                     </option>
                   </select>
                 </div>
 
-                {['bag', 'tin', 'custom', 'box'].includes((formData.unit || '').toLowerCase()) && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                      Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
-                    </label>
-                    <select
-                      className="input-field"
-                      value={formData.measurementUnit || 'kg'}
-                      onChange={e => setFormData(prev => ({ ...prev, measurementUnit: e.target.value }))}
-                      required
-                      style={{ height: '50px', cursor: 'pointer' }}
-                    >
-                      <option value="kg">KG</option>
-                      <option value="ltr">Litre</option>
-                      <option value="g">Gram (g)</option>
-                      <option value="ton">Ton</option>
-                      <option value="pcs">Piece</option>
-                    </select>
-                  </div>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
+                  </label>
+                  <select
+                    className="input-field"
+                    value={formData.measurementUnit || 'kg'}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setFormData(prev => ({ ...prev, measurementUnit: val, measurementBasis: val.toUpperCase() }));
+                    }}
+                    required
+                    style={{ height: '50px', cursor: 'pointer' }}
+                  >
+                    <option value="kg">KG</option>
+                    <option value="g">Gram (g)</option>
+                    <option value="ton">Ton</option>
+                    <option value="ltr">Litre</option>
+                    <option value="ml">Millilitre (ml)</option>
+                    <option value="pcs">Piece</option>
+                  </select>
+                </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} {formData.unit})</span>
+                    Unit Size * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. 30 for 30 {(formData.measurementUnit || 'KG').toUpperCase()} per {formData.unit})</span>
                   </label>
                   <input
                     type="number"
@@ -721,6 +780,36 @@ const EditProduct = () => {
                     min="0.01"
                     step="any"
                   />
+                </div>
+
+                {/* Package Measurement & Seller Price Calculation Banner */}
+                <div style={{
+                  gridColumn: '1 / -1',
+                  background: 'rgba(99, 102, 241, 0.08)',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Package Specification</span>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
+                      1 {(formData.unit || 'BAG').toUpperCase()} = {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
+                      {formData.priceBasis === 'per_package'
+                        ? `₹${Number(formData.sellerB2bPrice || 0).toFixed(2)} / ${(formData.unit || 'BAG').toUpperCase()} (Complete Package Price)`
+                        : `₹${(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / ${(formData.unit || 'BAG').toUpperCase()} (₹${Number(formData.sellerB2bPrice || 0)} × ${formData.unitSize || 1} ${(formData.measurementUnit || 'KG').toUpperCase()})`
+                      }
+                    </div>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -836,61 +925,130 @@ const EditProduct = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     {b2bVariants.map((variant, index) => {
                       const vSeller = parseFloat(variant.sellerPrice) || 0;
+                      const vUnitSize = parseFloat(variant.packetSizeVal) || 1;
+                      const vPkgType = (variant.packagingType || formData.unit || 'BAG').toUpperCase();
+                      const vMeas = (variant.packetSizeUnit || formData.measurementUnit || 'kg').toUpperCase();
+                      const vPriceBasis = variant.priceBasis || formData.priceBasis || 'per_unit';
+                      const vPkgPrice = vPriceBasis === 'per_package' ? vSeller : (vSeller * vUnitSize);
+                      const vGstRate = variant.gstPercent !== undefined && variant.gstPercent !== '' ? parseFloat(variant.gstPercent) : gstPercentNum;
+                      const vTotalWithGst = vPkgPrice > 0 ? (vPkgPrice + (vPkgPrice * vGstRate) / 100) : 0;
+
                       return (
-                        <div key={index} style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '15px', border: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
-                          <div style={{ flex: 1.2, minWidth: '100px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Size Value *</label>
-                            <input type="number" className="input-field" value={variant.packetSizeVal} onChange={(e) => handleB2bChange(index, 'packetSizeVal', e.target.value)} placeholder="e.g. 500" required min="0" step="0.01" />
-                          </div>
-                          <div style={{ flex: 1.4, minWidth: '130px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Unit *</label>
-                            <select 
-                              className="input-field" 
-                              value={variant.packetSizeUnit} 
-                              onChange={(e) => {
-                                if (e.target.value === '__ADD_CUSTOM__') {
-                                  setVariantCustomModalIndex(index);
-                                  setVariantCustomInput('');
-                                  setVariantCustomError('');
-                                } else {
-                                  handleB2bChange(index, 'packetSizeUnit', e.target.value);
-                                }
-                              }} 
-                              required 
-                              style={{ height: '48px', cursor: 'pointer' }}
+                        <div key={index} style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '15px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                            <div style={{ flex: 1.2, minWidth: '100px' }}>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Packaging Type *</label>
+                              <select 
+                                className="input-field" 
+                                value={variant.packagingType || formData.unit || 'BAG'} 
+                                onChange={(e) => handleB2bChange(index, 'packagingType', e.target.value)}
+                                required
+                                style={{ height: '48px', cursor: 'pointer' }}
+                              >
+                                <option value="BAG">BAG</option>
+                                <option value="BOX">BOX</option>
+                                <option value="TIN">TIN</option>
+                                <option value="BOTTLE">BOTTLE</option>
+                                <option value="PACK">PACK</option>
+                                <option value="PIECE">PIECE</option>
+                              </select>
+                            </div>
+
+                            <div style={{ flex: 1, minWidth: '90px' }}>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Unit Size *</label>
+                              <input 
+                                type="number" 
+                                className="input-field" 
+                                value={variant.packetSizeVal} 
+                                onChange={(e) => handleB2bChange(index, 'packetSizeVal', e.target.value)} 
+                                placeholder="e.g. 10" 
+                                required 
+                                min="0.01" 
+                                step="any" 
+                                style={{ height: '48px' }}
+                              />
+                            </div>
+
+                            <div style={{ flex: 1.1, minWidth: '100px' }}>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Measurement *</label>
+                              <select 
+                                className="input-field" 
+                                value={variant.packetSizeUnit} 
+                                onChange={(e) => handleB2bChange(index, 'packetSizeUnit', e.target.value)} 
+                                required
+                                style={{ height: '48px', cursor: 'pointer' }}
+                              >
+                                <option value="kg">KG</option>
+                                <option value="g">Gram (g)</option>
+                                <option value="ton">Ton</option>
+                                <option value="ltr">Litre</option>
+                                <option value="ml">Millilitre</option>
+                                <option value="pcs">Piece</option>
+                              </select>
+                            </div>
+
+                            <div style={{ flex: 1.5, minWidth: '140px' }}>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Price Basis *</label>
+                              <select 
+                                className="input-field" 
+                                value={variant.priceBasis || formData.priceBasis || 'per_unit'} 
+                                onChange={(e) => handleB2bChange(index, 'priceBasis', e.target.value)} 
+                                required
+                                style={{ height: '48px', cursor: 'pointer' }}
+                              >
+                                <option value="per_unit">Per Measurement Unit (₹/{vMeas})</option>
+                                <option value="per_package">Per Complete {vPkgType}</option>
+                              </select>
+                            </div>
+
+                            <div style={{ flex: 1.2, minWidth: '110px' }}>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Price (₹) *</label>
+                              <input 
+                                type="number" 
+                                className="input-field" 
+                                value={variant.sellerPrice} 
+                                onChange={(e) => handleB2bChange(index, 'sellerPrice', e.target.value)} 
+                                placeholder="Price" 
+                                min="0" 
+                                step="0.01" 
+                                required 
+                                style={{ height: '48px' }}
+                              />
+                            </div>
+
+                            <div style={{ flex: 0.8, minWidth: '80px' }}>
+                              <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Stock *</label>
+                              <input 
+                                type="number" 
+                                className="input-field" 
+                                value={variant.stock} 
+                                onChange={(e) => handleB2bChange(index, 'stock', e.target.value)} 
+                                placeholder="Stock" 
+                                min="0" 
+                                required 
+                                style={{ height: '48px' }}
+                              />
+                            </div>
+
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveB2b(index)} 
+                              style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              title="Remove Variant"
                             >
-                              <option value="pcs">pcs</option>
-                              <option value="g">g</option>
-                              <option value="kg">kg</option>
-                              <option value="ltr">ltr</option>
-                              <option value="ml">ml</option>
-                              <option value="bag">bag</option>
-                              {(variant.customUnitOptions || DEFAULT_VARIANT_UNITS)
-                                .filter(u => !['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'].includes(u) && !['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'].includes(u.toLowerCase()))
-                                .map(u => (
-                                  <option key={u} value={u}>{u}</option>
-                                ))
-                              }
-                              <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
-                                + Custom
-                              </option>
-                            </select>
+                              <Trash2 size={20} />
+                            </button>
                           </div>
-                          <div style={{ flex: 1.5, minWidth: '130px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Base Price (₹) *</label>
-                            <input type="number" className="input-field" value={variant.sellerPrice} onChange={(e) => handleB2bChange(index, 'sellerPrice', e.target.value)} placeholder="Seller Net Price" min="0" step="0.01" required style={{ height: '48px' }} />
+
+                          {/* Variant Specification & Pricing Summary */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(99, 102, 241, 0.05)', padding: '8px 12px', borderRadius: '8px', fontSize: '11.5px', flexWrap: 'wrap', gap: '8px' }}>
+                            <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                              1 {vPkgType} = {vUnitSize} {vMeas}
+                            </span>
+                            <span style={{ color: '#22c55e', fontWeight: 700 }}>
+                              Payout / {vPkgType}: ₹{vPkgPrice.toFixed(2)} {vGstRate > 0 ? `(₹${vTotalWithGst.toFixed(2)} incl. ${vGstRate}% GST)` : ''}
+                            </span>
                           </div>
-                          <div style={{ flex: 1.5, minWidth: '140px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: '#22c55e', marginBottom: '6px', fontWeight: 600 }}>Total with GST (₹)</label>
-                            <input type="text" className="input-field" value={vSeller > 0 ? `₹${(vSeller + (vSeller * gstPercentNum) / 100).toFixed(2)}` : '₹0.00'} disabled style={{ background: 'rgba(34, 197, 94, 0.05)', borderColor: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', fontWeight: 700, height: '48px' }} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: '80px' }}>
-                            <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-main)', marginBottom: '6px', fontWeight: 600 }}>Stock *</label>
-                            <input type="number" className="input-field" value={variant.stock} onChange={(e) => handleB2bChange(index, 'stock', e.target.value)} placeholder="Stock" min="0" required style={{ height: '48px' }} />
-                          </div>
-                          <button type="button" onClick={() => handleRemoveB2b(index)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                            <Trash2 size={20} />
-                          </button>
                         </div>
                       );
                     })}
