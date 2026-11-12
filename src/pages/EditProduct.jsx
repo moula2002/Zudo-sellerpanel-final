@@ -83,7 +83,7 @@ const EditProduct = () => {
   const [unitDeleteLoading, setUnitDeleteLoading] = useState(false);
   const [unitDeleteFeedback, setUnitDeleteFeedback] = useState({ type: '', text: '' });
 
-  const DEFAULT_PACKAGING = ['BAG', 'BOX', 'TIN', 'BOTTLE', 'PACK', 'PIECE'];
+  const DEFAULT_PACKAGING = ['BAG', 'BOX', 'TIN', 'BOTTLE', 'PACK', 'PIECE', 'FGB', 'GHNM'];
   const DEFAULT_MEASUREMENTS = ['kg', 'g', 'ton', 'ltr', 'ml', 'pcs'];
 
   useEffect(() => {
@@ -282,11 +282,21 @@ const EditProduct = () => {
       setShowAddPackagingModal(true);
       return;
     }
+    if (field === 'packagingType' && value === '__MANAGE_CUSTOM__') {
+      setManageModalTab('packaging');
+      setShowManageUnitsModal(true);
+      return;
+    }
     if (field === 'packetSizeUnit' && value === '__ADD_CUSTOM__') {
       setActiveVariantAddIndex(index);
       setAddMeasurementInput('');
       setAddMeasurementError('');
       setShowAddMeasurementModal(true);
+      return;
+    }
+    if (field === 'packetSizeUnit' && value === '__MANAGE_CUSTOM__') {
+      setManageModalTab('measurement');
+      setShowManageUnitsModal(true);
       return;
     }
     const newArr = [...b2bVariants];
@@ -812,6 +822,9 @@ const EditProduct = () => {
                         setAddPackagingInput('');
                         setAddPackagingError('');
                         setShowAddPackagingModal(true);
+                      } else if (e.target.value === '__MANAGE_CUSTOM__') {
+                        setManageModalTab('packaging');
+                        setShowManageUnitsModal(true);
                       } else {
                         const val = e.target.value;
                         setFormData(prev => ({ ...prev, unit: val, packagingType: val }));
@@ -825,6 +838,9 @@ const EditProduct = () => {
                     ))}
                     <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
                       + Custom Packaging
+                    </option>
+                    <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                      ⚙ Manage / Delete Packaging...
                     </option>
                   </select>
                 </div>
@@ -842,6 +858,9 @@ const EditProduct = () => {
                         setAddMeasurementInput('');
                         setAddMeasurementError('');
                         setShowAddMeasurementModal(true);
+                      } else if (e.target.value === '__MANAGE_CUSTOM__') {
+                        setManageModalTab('measurement');
+                        setShowManageUnitsModal(true);
                       } else {
                         const val = e.target.value;
                         setFormData(prev => ({ ...prev, measurementUnit: val, measurementBasis: val.toUpperCase() }));
@@ -855,6 +874,9 @@ const EditProduct = () => {
                     ))}
                     <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: '#22c55e' }}>
                       + Custom Measurement
+                    </option>
+                    <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                      ⚙ Manage / Delete Measurements...
                     </option>
                   </select>
                 </div>
@@ -976,6 +998,9 @@ const EditProduct = () => {
                                 <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
                                   + Custom Packaging
                                 </option>
+                                <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                                  ⚙ Manage / Delete Packaging...
+                                </option>
                               </select>
                             </div>
 
@@ -1008,6 +1033,9 @@ const EditProduct = () => {
                                 ))}
                                 <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: '#22c55e' }}>
                                   + Custom Measurement
+                                </option>
+                                <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                                  ⚙ Manage / Delete Measurements...
                                 </option>
                               </select>
                             </div>
