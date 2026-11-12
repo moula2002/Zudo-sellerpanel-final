@@ -39,7 +39,13 @@ const setupInterceptors = (instance) => {
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
-      if (error.response && error.response.status === 401) {
+      // Don't auto-logout for blob/document download requests or image fetches
+      const isFileOrBlobRequest = 
+        error.config?.responseType === 'blob' || 
+        error.config?.url?.includes('/download') ||
+        error.config?.url?.includes('/image');
+
+      if (error.response && error.response.status === 401 && !isFileOrBlobRequest) {
         if (error.response.data && error.response.data.code === 'SESSION_INVALIDATED') {
           alert('Session expired. You have logged in from another device.');
         } else {
