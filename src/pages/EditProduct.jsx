@@ -204,11 +204,6 @@ const EditProduct = () => {
           };
         };
 
-        const globalVariantCustom = Array.isArray(customRes.data?.variantUnits)
-          ? customRes.data.variantUnits.map(u => String(u || '').trim().toUpperCase()).filter(Boolean)
-          : [];
-        setGlobalVariantCustomUnits(globalVariantCustom);
-
         const parsedB2b = (p.b2b || []).map(v => {
           const parsed = parsePacketSize(v.packetSize);
           const vUnitSize = v.unitSize !== undefined && v.unitSize !== null ? String(v.unitSize) : (v.sizeValue ? String(v.sizeValue) : (parsed.val || '1'));
@@ -218,13 +213,11 @@ const EditProduct = () => {
             : (v.sellerPrice !== undefined && v.sellerPrice !== null ? String(v.sellerPrice) : (v.price ? String(v.price) : ''));
           const variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'kg').toLowerCase();
           const variantPkg = (v.packagingType || loadedPackaging || 'BAG').toUpperCase();
-          const variantOptions = Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustom, variantMeas]));
           return {
             packetSizeVal: vUnitSize,
             packetSizeUnit: variantMeas,
             packagingType: variantPkg,
             priceBasis: vPriceBasis,
-            customUnitOptions: variantOptions,
             sellerPrice: vSeller,
             price: v.price ? String(v.price) : '',
             gstPercent: v.gstPercent !== undefined && v.gstPercent !== null ? String(v.gstPercent) : (p.gstPercent ? String(p.gstPercent) : '0'),
