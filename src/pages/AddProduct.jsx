@@ -426,8 +426,11 @@ const AddProduct = () => {
 
       // Explicitly set wholesale pricing without commission addition
       data.append('sellerB2bPrice', sellerB2bVal);
-      data.append('b2bPrice', sellerB2bVal);
       data.append('sellerPrice', sellerB2bVal);
+      data.append('sellerPricePerBaseUnit', sellerB2bVal);
+      data.append('sellerPricePerProductUnit', sellerB2bVal);
+      data.append('sellerUnitPrice', sellerB2bVal);
+      data.append('b2bPrice', sellerB2bVal);
       data.append('price', sellerB2bVal);
       data.append('commissionType', 'flat');
       data.append('commissionValue', 0);

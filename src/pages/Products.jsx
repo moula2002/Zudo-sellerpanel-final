@@ -13,21 +13,27 @@ const ProductDetailModal = ({ product, onClose }) => {
   const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
   const rawBase = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
     ? Number(product.sellerPricePerBaseUnit)
-    : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
+    : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
         ? Number(product.sellerB2bPrice)
-        : (product.sellerPrice !== undefined && product.sellerPrice !== null
+        : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
             ? Number(product.sellerPrice)
-            : Number(product.b2bPrice || product.price || 0)));
+            : Number(product.price || 0)));
 
   const pricing = calculateB2bPricing({
-    basePrice: isPackage ? (rawBase / uSize) : rawBase,
+    basePrice: rawBase,
     unitSize: uSize,
     gstRate: gstRate,
     quantity: 1
   });
 
-  const sellerPrice = product.sellerPricePerProductUnit || product.sellerPricePerPackage || pricing.sellerPricePerPackage;
-  const customerTotalWithGst = product.customerPricePerPackage || product.customerFinalPricePerProductUnit || pricing.customerPricePerPackage;
+  const sellerPrice = rawBase;
+  const customerTotalWithGst = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
+    ? Number(product.customerFinalPricePerProductUnit)
+    : (product.price !== undefined && Number(product.price) > 0
+        ? Number(product.price)
+        : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
+            ? Number(product.b2bPrice)
+            : pricing.customerPricePerPackage));
 
   return (
     <div style={{
@@ -430,18 +436,25 @@ const Products = () => {
               const displayGstRate = product.gstRate || product.gstPercent || 0;
               const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
               const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-              const rawBase = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+              // Seller Price = Base Price (never multiplied by unit size)
+              const baseSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
                 ? Number(product.sellerPricePerBaseUnit)
-                : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
+                : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
                     ? Number(product.sellerB2bPrice)
-                    : (product.sellerPrice !== undefined && product.sellerPrice !== null
+                    : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
                         ? Number(product.sellerPrice)
                         : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
                             ? Number(product.b2b[0].sellerPrice)
-                            : Number(product.b2bPrice || product.price || 0))));
+                            : Number(product.price || 0))));
 
-              const baseSellerPrice = rawBase;
-              const baseCustomerPrice = product.price ? Number(product.price) : (baseSellerPrice + (baseSellerPrice * displayGstRate) / 100);
+              // Customer Price = Base Price + Total Commission (+ GST)
+              const baseCustomerPrice = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
+                ? Number(product.customerFinalPricePerProductUnit)
+                : (product.price !== undefined && Number(product.price) > 0
+                    ? Number(product.price)
+                    : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
+                        ? Number(product.b2bPrice)
+                        : (baseSellerPrice + (product.commissionAmount || 0))));
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -577,18 +590,25 @@ const Products = () => {
           const displayGstRate = product.gstRate || product.gstPercent || 0;
           const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
           const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-          const rawBase = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+          // Seller Price = Base Price (never multiplied by unit size)
+          const baseSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
             ? Number(product.sellerPricePerBaseUnit)
-            : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
+            : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
                 ? Number(product.sellerB2bPrice)
-                : (product.sellerPrice !== undefined && product.sellerPrice !== null
+                : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
                     ? Number(product.sellerPrice)
                     : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
                         ? Number(product.b2b[0].sellerPrice)
-                        : Number(product.b2bPrice || product.price || 0))));
+                        : Number(product.price || 0))));
 
-          const baseSellerPrice = rawBase;
-          const baseCustomerPrice = product.price ? Number(product.price) : (baseSellerPrice + (baseSellerPrice * displayGstRate) / 100);
+          // Customer Price = Base Price + Total Commission (+ GST)
+          const baseCustomerPrice = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
+            ? Number(product.customerFinalPricePerProductUnit)
+            : (product.price !== undefined && Number(product.price) > 0
+                ? Number(product.price)
+                : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
+                    ? Number(product.b2bPrice)
+                    : (baseSellerPrice + (product.commissionAmount || 0))));
 
           return (
             <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', gap: '16px' }}>
