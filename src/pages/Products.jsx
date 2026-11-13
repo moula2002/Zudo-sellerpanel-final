@@ -11,13 +11,17 @@ const ProductDetailModal = ({ product, onClose }) => {
   const gstRate = product.gstRate || product.gstPercent || 0;
   const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
   const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-  const rawBase = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
-    ? Number(product.sellerPricePerBaseUnit)
-    : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
-        ? Number(product.sellerB2bPrice)
-        : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
-            ? Number(product.sellerPrice)
-            : Number(product.price || 0)));
+  const rawBase = product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+    ? Number(product.sellerPrice)
+    : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
+        ? Number(product.sellerUnitPrice)
+        : (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && Number(product.sellerPricePerProductUnit) > 0
+            ? Number(product.sellerPricePerProductUnit)
+            : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
+                ? Number(product.sellerB2bPrice)
+                : (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+                    ? Number(product.sellerPricePerBaseUnit)
+                    : Number(product.price || 0)))));
 
   const pricing = calculateB2bPricing({
     basePrice: rawBase,
@@ -432,15 +436,19 @@ const Products = () => {
               const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
               const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
               // Seller Price = Base Price (never multiplied by unit size)
-              const baseSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
-                ? Number(product.sellerPricePerBaseUnit)
-                : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
-                    ? Number(product.sellerB2bPrice)
-                    : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
-                        ? Number(product.sellerPrice)
-                        : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
-                            ? Number(product.b2b[0].sellerPrice)
-                            : Number(product.price || 0))));
+              const baseSellerPrice = product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+                ? Number(product.sellerPrice)
+                : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
+                    ? Number(product.sellerUnitPrice)
+                    : (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && Number(product.sellerPricePerProductUnit) > 0
+                        ? Number(product.sellerPricePerProductUnit)
+                        : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
+                            ? Number(product.sellerB2bPrice)
+                            : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined && Number(product.b2b[0].sellerPrice) > 0
+                                ? Number(product.b2b[0].sellerPrice)
+                                : (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+                                    ? Number(product.sellerPricePerBaseUnit)
+                                    : Number(product.price || 0))))));
 
               // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
               const baseGstRate = parseFloat(displayGstRate) || 0;
@@ -582,15 +590,19 @@ const Products = () => {
           const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
           const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
           // Seller Price = Base Price (never multiplied by unit size)
-          const baseSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
-            ? Number(product.sellerPricePerBaseUnit)
-            : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
-                ? Number(product.sellerB2bPrice)
-                : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
-                    ? Number(product.sellerPrice)
-                    : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
-                        ? Number(product.b2b[0].sellerPrice)
-                        : Number(product.price || 0))));
+          const baseSellerPrice = product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+            ? Number(product.sellerPrice)
+            : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
+                ? Number(product.sellerUnitPrice)
+                : (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && Number(product.sellerPricePerProductUnit) > 0
+                    ? Number(product.sellerPricePerProductUnit)
+                    : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
+                        ? Number(product.sellerB2bPrice)
+                        : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined && Number(product.b2b[0].sellerPrice) > 0
+                            ? Number(product.b2b[0].sellerPrice)
+                            : (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+                                ? Number(product.sellerPricePerBaseUnit)
+                                : Number(product.price || 0))))));
 
           // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
           const baseGstRate = parseFloat(displayGstRate) || 0;
