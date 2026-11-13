@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api, { getImageUrl } from '../utils/api';
 import { RefreshCcw, Search, User, MapPin, Package, AlertCircle, Calendar, ExternalLink, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
+import { formatOrderNumber } from '../utils/orderFormat';
 
 export const getReturnStatusConfig = (status) => {
   const s = String(status || '').trim().toLowerCase();
@@ -59,9 +60,11 @@ const Returns = () => {
   };
 
   const filteredReturns = returns.filter(ret => {
-    const orderIdStr = ret.orderId || ret._id.slice(-6).toUpperCase();
+    const formattedId = formatOrderNumber(ret);
+    const orderIdStr = ret.orderNumber ? String(ret.orderNumber) : (ret.orderId || ret._id.slice(-6).toUpperCase());
     const customerName = ret.userId?.name || 'Guest';
-    return orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    return formattedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
            customerName.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
@@ -93,7 +96,7 @@ const Returns = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
             <div>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ORDER ID</div>
-              <div style={{ fontWeight: 700, fontSize: '18px', color: '#6366f1' }}>#{order.orderId || order._id.slice(-6).toUpperCase()}</div>
+              <div style={{ fontWeight: 700, fontSize: '18px', color: '#6366f1' }}>{formatOrderNumber(order)}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>STATUS</div>
@@ -279,7 +282,7 @@ const Returns = () => {
             ) : filteredReturns.map((order) => (
               <tr key={order._id} style={{ borderBottom: '1px solid var(--border-color)' }} className="table-row-hover">
                 <td style={{ padding: '16px 24px' }}>
-                  <div style={{ fontWeight: 600, color: '#6366f1' }}>#{order.orderId || order._id.slice(-6).toUpperCase()}</div>
+                  <div style={{ fontWeight: 600, color: '#6366f1' }}>{formatOrderNumber(order)}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{new Date(order.updatedAt).toLocaleDateString()}</div>
                 </td>
                 <td style={{ padding: '16px 24px' }}>

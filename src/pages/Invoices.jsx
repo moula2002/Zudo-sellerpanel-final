@@ -351,12 +351,8 @@ const Invoices = () => {
         return;
       }
 
-      // Validate image count (1-5 required)
+      // Validate image count (Optional, max 5)
       const imgCount = entry.images ? entry.images.length : 0;
-      if (imgCount === 0) {
-        setError(`${entryLabel} (Invoice #${trimmedNum}): Please upload at least 1 invoice image (minimum 1, maximum 5).`);
-        return;
-      }
       if (imgCount > 5) {
         setError(`${entryLabel} (Invoice #${trimmedNum}): Exceeds maximum 5 images.`);
         return;
@@ -740,21 +736,21 @@ const Invoices = () => {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
-                          Upload Invoice Images *
+                          Upload Invoice Images (Optional)
                         </label>
                         <span style={{
                           fontSize: '11px',
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: '6px',
-                          background: entryImages.length > 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: entryImages.length > 0 ? '#22c55e' : '#ef4444'
+                          background: entryImages.length > 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                          color: entryImages.length > 0 ? '#22c55e' : 'var(--text-dim)'
                         }}>
                           {entryImages.length} / 5 Images
                         </span>
                       </div>
                       <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
-                        Upload 1 to 5 images (Signed Invoice Front, Back, Supporting Docs). JPG, JPEG, PNG, WEBP (Max 10MB each).
+                        Optional: Upload 1 to 5 images (Signed Invoice Front, Back, Supporting Docs). JPG, JPEG, PNG, WEBP (Max 10MB each).
                       </span>
                     </div>
                   </div>

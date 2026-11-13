@@ -7,6 +7,7 @@ import {
   FileText, Printer, Check, X, Phone, Layers 
 } from 'lucide-react';
 import Layout from '../components/Layout';
+import { formatOrderNumber } from '../utils/orderFormat';
 
 const StatusBadge = ({ status }) => {
   const configs = {
@@ -79,7 +80,7 @@ const Orders = () => {
 
   const exportToExcel = () => {
     const data = filteredOrders.map(order => ({
-      'Order ID': order.orderId || order._id,
+      'Order ID': formatOrderNumber(order),
       'Date': new Date(order.createdAt).toLocaleDateString(),
       'Time': new Date(order.createdAt).toLocaleTimeString(),
       'Customer': order.userId?.name || 'Guest',
@@ -162,7 +163,7 @@ const Orders = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ORDER ID</div>
-              <div style={{ fontWeight: 700, fontSize: '18px', color: '#6366f1' }}>#{order.orderId || order._id.slice(-6).toUpperCase()}</div>
+              <div style={{ fontWeight: 700, fontSize: '18px', color: '#6366f1' }}>{formatOrderNumber(order)}</div>
             </div>
             <StatusBadge status={order.orderStatus} />
           </div>
@@ -345,9 +346,11 @@ const Orders = () => {
   };
 
   const filteredOrders = orders.filter(order => {
-    const orderIdStr = order.orderId || order._id.slice(-6).toUpperCase();
+    const formattedId = formatOrderNumber(order);
+    const orderIdStr = order.orderNumber ? String(order.orderNumber) : (order.orderId || order._id.slice(-6).toUpperCase());
     const customerName = order.userId?.name || 'Guest';
-    const matchesSearch = orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = formattedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customerName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'All'
       ? true
@@ -696,7 +699,7 @@ const Orders = () => {
               return (
                 <tr key={order._id} style={{ borderBottom: '1px solid var(--border-color)' }} className="table-row-hover">
                   <td style={{ padding: '16px 24px' }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#6366f1' }}>#{order.orderId || order._id.slice(-6).toUpperCase()}</div>
+                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#6366f1' }}>{formatOrderNumber(order)}</div>
                   </td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ fontSize: '14px', color: 'var(--text-main)' }}>{new Date(order.createdAt).toLocaleDateString()}</div>
@@ -832,7 +835,7 @@ const Orders = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '15px', fontWeight: 800, color: '#6366f1' }}>
-                    #{order.orderId || order._id.slice(-6).toUpperCase()}
+                    {formatOrderNumber(order)}
                   </span>
                   <span style={{
                     fontSize: '10px',

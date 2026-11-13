@@ -15,6 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import Layout from '../components/Layout';
+import { formatOrderNumber } from '../utils/orderFormat';
 
 const StatusBadge = ({ status }) => {
   const configs = {
@@ -171,7 +172,7 @@ const Pickup = () => {
               </div>
               <div class="id-section">
                 <div class="id-label">ORDER ID</div>
-                <div class="id-value">#${order.orderId || order._id.slice(-6).toUpperCase()}</div>
+                <div class="id-value">${formatOrderNumber(order)}</div>
               </div>
             </div>
             
@@ -274,10 +275,12 @@ const Pickup = () => {
   };
 
   const filteredOrders = orders.filter(order => {
-    const orderIdStr = order.orderId || order._id.slice(-6).toUpperCase();
+    const formattedId = formatOrderNumber(order);
+    const orderIdStr = order.orderNumber ? String(order.orderNumber) : (order.orderId || order._id.slice(-6).toUpperCase());
     const customerName = order.userId?.name || 'Guest';
     const driverName = order.deliveryBoyId?.name || '';
-    return orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    return formattedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       driverName.toLowerCase().includes(searchTerm.toLowerCase());
   });
@@ -319,7 +322,7 @@ const Pickup = () => {
               <div>
                 <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, marginBottom: '4px' }}>ORDER ID</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ fontWeight: 700, color: 'var(--primary)' }}>#{order.orderId || order._id.slice(-6).toUpperCase()}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatOrderNumber(order)}</div>
                   <button
                     onClick={() => generatePickupSlip(order)}
                     style={{ background: 'rgba(99, 102, 241, 0.1)', border: 'none', color: '#6366f1', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
