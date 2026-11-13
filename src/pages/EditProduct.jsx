@@ -980,7 +980,7 @@ const EditProduct = () => {
 
                       return (
                         <div key={index} style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '15px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                             <div style={{ flex: 1.2, minWidth: '100px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Packaging Type *</label>
                               <select 
@@ -1070,14 +1070,17 @@ const EditProduct = () => {
                               />
                             </div>
 
-                            <button 
-                              type="button" 
-                              onClick={() => handleRemoveB2b(index)} 
-                              style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              title="Remove Variant"
-                            >
-                              <Trash2 size={20} />
-                            </button>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={{ display: 'block', fontSize: '11px', opacity: 0, marginBottom: '4px', pointerEvents: 'none', userSelect: 'none' }}>Action</label>
+                              <button 
+                                type="button" 
+                                onClick={() => handleRemoveB2b(index)} 
+                                style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                title="Remove Variant"
+                              >
+                                <Trash2 size={20} />
+                              </button>
+                            </div>
                           </div>
 
                           {/* Variant Specification & Pricing Summary */}
