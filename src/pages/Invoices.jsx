@@ -595,25 +595,6 @@ const Invoices = () => {
               </span>
             )}
           </div>
-
-          {/* "+ Add Another Invoice" Button */}
-          <button
-            type="button"
-            onClick={handleAddInvoiceEntry}
-            className="btn-secondary"
-            style={{
-              padding: '8px 16px',
-              fontSize: '13px',
-              fontWeight: 700,
-              gap: '6px',
-              borderRadius: '12px',
-              borderColor: 'rgba(59, 130, 246, 0.4)',
-              color: '#3b82f6',
-              background: 'rgba(59, 130, 246, 0.08)'
-            }}
-          >
-            <Plus size={16} /> + Add Another Invoice
-          </button>
         </div>
 
         {error && (
@@ -776,24 +757,6 @@ const Invoices = () => {
                         Upload 1 to 5 images (Signed Invoice Front, Back, Supporting Docs). JPG, JPEG, PNG, WEBP (Max 10MB each).
                       </span>
                     </div>
-
-                    {entryImages.length < 5 && (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRefs.current[entry.id]?.click()}
-                        className="btn-secondary"
-                        style={{
-                          padding: '6px 14px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          gap: '6px',
-                          borderRadius: '8px',
-                          height: 'auto'
-                        }}
-                      >
-                        <Upload size={14} /> + Add Image
-                      </button>
-                    )}
                   </div>
 
                   <input 
@@ -975,7 +938,10 @@ const Invoices = () => {
                 fontSize: '13px',
                 fontWeight: 700,
                 gap: '8px',
-                borderRadius: '14px'
+                borderRadius: '14px',
+                borderColor: 'rgba(59, 130, 246, 0.4)',
+                color: '#3b82f6',
+                background: 'rgba(59, 130, 246, 0.08)'
               }}
             >
               <Plus size={16} /> + Add Another Invoice
