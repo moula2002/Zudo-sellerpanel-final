@@ -485,7 +485,7 @@ const AddProduct = () => {
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
           const pkgPrice = rawPrice; // Seller Base Price is NOT multiplied by uSize
-          const basePrice = rawPrice;
+          const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -493,8 +493,8 @@ const AddProduct = () => {
             measurementUnit: mUnit,
             measurementBasis: mUnit,
             packagingType: pType,
-            priceBasis: 'per_unit',
-            isPackagePrice: false,
+            priceBasis: 'per_package',
+            isPackagePrice: true,
             sellerPrice: pkgPrice,
             sellerPricePerProductUnit: pkgPrice,
             sellerPricePerBaseUnit: basePrice,
@@ -1002,7 +1002,7 @@ const AddProduct = () => {
                     const vUnitSize = parseFloat(variant.packetSizeVal) || 1;
                     const vPkgType = (variant.packagingType || formData.unit || 'BAG').toUpperCase();
                     const vMeas = (variant.packetSizeUnit || formData.measurementUnit || 'kg').toUpperCase();
-                    const vPkgPrice = vSellerPrice * vUnitSize;
+                    const vPkgPrice = vSellerPrice;
                     const vGstRate = variant.gstPercent !== undefined && variant.gstPercent !== '' ? parseFloat(variant.gstPercent) : gstNum;
                     const vTotalWithGst = vPkgPrice > 0 ? (vPkgPrice + (vPkgPrice * vGstRate) / 100) : 0;
 
