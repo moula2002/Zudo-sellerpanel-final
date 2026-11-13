@@ -415,8 +415,8 @@ const AddProduct = () => {
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
-          const pkgPrice = Math.round(rawPrice * uSize * 100) / 100;
-          const basePrice = rawPrice;
+          const pkgPrice = rawPrice;
+          const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -424,8 +424,8 @@ const AddProduct = () => {
             measurementUnit: mUnit,
             measurementBasis: mUnit,
             packagingType: pType,
-            priceBasis: 'per_unit',
-            isPackagePrice: false,
+            priceBasis: 'per_package',
+            isPackagePrice: true,
             sellerPrice: pkgPrice,
             sellerPricePerProductUnit: pkgPrice,
             sellerPricePerBaseUnit: basePrice,
@@ -774,9 +774,9 @@ const AddProduct = () => {
                   </div>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Unit Price / Package</span>
                   <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
-                    ₹{(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()} (₹{Number(formData.sellerB2bPrice || 0)} × {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()})
+                    ₹{Number(formData.sellerB2bPrice || 0).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()} ({formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()})
                   </div>
                 </div>
               </div>
@@ -916,7 +916,7 @@ const AddProduct = () => {
                     const vUnitSize = parseFloat(variant.packetSizeVal) || 1;
                     const vPkgType = (variant.packagingType || formData.unit || 'BAG').toUpperCase();
                     const vMeas = (variant.packetSizeUnit || formData.measurementUnit || 'kg').toUpperCase();
-                    const vPkgPrice = vSellerPrice * vUnitSize;
+                    const vPkgPrice = vSellerPrice;
                     const vGstRate = variant.gstPercent !== undefined && variant.gstPercent !== '' ? parseFloat(variant.gstPercent) : gstNum;
                     const vTotalWithGst = vPkgPrice > 0 ? (vPkgPrice + (vPkgPrice * vGstRate) / 100) : 0;
 

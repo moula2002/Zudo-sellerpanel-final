@@ -461,8 +461,8 @@ const EditProduct = () => {
             }
           }
 
-          const pkgPrice = Math.round(rawPrice * uSize * 100) / 100;
-          const basePrice = rawPrice;
+          const pkgPrice = rawPrice;
+          const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -470,8 +470,8 @@ const EditProduct = () => {
             measurementUnit: mUnit,
             measurementBasis: mUnit,
             packagingType: pType,
-            priceBasis: 'per_unit',
-            isPackagePrice: false,
+            priceBasis: 'per_package',
+            isPackagePrice: true,
             sellerPrice: pkgPrice,
             sellerPricePerProductUnit: pkgPrice,
             sellerPricePerBaseUnit: basePrice,
@@ -932,7 +932,7 @@ const EditProduct = () => {
                       const vUnitSize = parseFloat(variant.packetSizeVal) || 1;
                       const vPkgType = (variant.packagingType || formData.unit || 'BAG').toUpperCase();
                       const vMeas = (variant.packetSizeUnit || formData.measurementUnit || 'kg').toUpperCase();
-                      const vPkgPrice = vSeller * vUnitSize;
+                      const vPkgPrice = vSeller;
                       const vGstRate = variant.gstPercent !== undefined && variant.gstPercent !== '' ? parseFloat(variant.gstPercent) : gstPercentNum;
                       const vTotalWithGst = vPkgPrice > 0 ? (vPkgPrice + (vPkgPrice * vGstRate) / 100) : 0;
 
