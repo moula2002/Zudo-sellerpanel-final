@@ -102,10 +102,11 @@ export function calculateB2bPricing({
   const customerBasePricePerPackage = parseFloat((sellerPricePerPackage + totalCommissionPerPackage).toFixed(2));
   const totalCustomerBasePrice = parseFloat((customerBasePricePerPackage * qty).toFixed(2));
 
-  const gstAmountPerPackage = parseFloat((customerBasePricePerPackage * (gst / 100)).toFixed(2));
-  const totalGstAmount = parseFloat((totalCustomerBasePrice * (gst / 100)).toFixed(2));
-  const customerPricePerPackage = parseFloat((customerBasePricePerPackage + gstAmountPerPackage).toFixed(2));
-  const totalCustomerPrice = parseFloat((totalCustomerBasePrice + totalGstAmount).toFixed(2));
+  // Step 2: Customer Price for Seller Panel Display (Base Price + GST only, Admin Commission is NOT included)
+  const gstAmountPerPackage = parseFloat((sellerPricePerPackage * (gst / 100)).toFixed(2));
+  const totalGstAmount = parseFloat((totalSellerPrice * (gst / 100)).toFixed(2));
+  const customerPricePerPackage = parseFloat((sellerPricePerPackage + gstAmountPerPackage).toFixed(2));
+  const totalCustomerPrice = parseFloat((totalSellerPrice + totalGstAmount).toFixed(2));
 
   return {
     basePrice: bPrice,

@@ -27,13 +27,8 @@ const ProductDetailModal = ({ product, onClose }) => {
   });
 
   const sellerPrice = rawBase;
-  const customerTotalWithGst = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
-    ? Number(product.customerFinalPricePerProductUnit)
-    : (product.price !== undefined && Number(product.price) > 0
-        ? Number(product.price)
-        : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
-            ? Number(product.b2bPrice)
-            : pricing.customerPricePerPackage));
+  const customerGstAmount = parseFloat(((sellerPrice * parseFloat(gstRate || 0)) / 100).toFixed(2));
+  const customerTotalWithGst = parseFloat((sellerPrice + customerGstAmount).toFixed(2));
 
   return (
     <div style={{
@@ -447,14 +442,10 @@ const Products = () => {
                             ? Number(product.b2b[0].sellerPrice)
                             : Number(product.price || 0))));
 
-              // Customer Price = Base Price + Total Commission (+ GST)
-              const baseCustomerPrice = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
-                ? Number(product.customerFinalPricePerProductUnit)
-                : (product.price !== undefined && Number(product.price) > 0
-                    ? Number(product.price)
-                    : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
-                        ? Number(product.b2bPrice)
-                        : (baseSellerPrice + (product.commissionAmount || 0))));
+              // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
+              const baseGstRate = parseFloat(displayGstRate) || 0;
+              const baseGstAmount = parseFloat(((baseSellerPrice * baseGstRate) / 100).toFixed(2));
+              const baseCustomerPrice = parseFloat((baseSellerPrice + baseGstAmount).toFixed(2));
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -601,14 +592,10 @@ const Products = () => {
                         ? Number(product.b2b[0].sellerPrice)
                         : Number(product.price || 0))));
 
-          // Customer Price = Base Price + Total Commission (+ GST)
-          const baseCustomerPrice = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
-            ? Number(product.customerFinalPricePerProductUnit)
-            : (product.price !== undefined && Number(product.price) > 0
-                ? Number(product.price)
-                : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
-                    ? Number(product.b2bPrice)
-                    : (baseSellerPrice + (product.commissionAmount || 0))));
+          // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
+          const baseGstRate = parseFloat(displayGstRate) || 0;
+          const baseGstAmount = parseFloat(((baseSellerPrice * baseGstRate) / 100).toFixed(2));
+          const baseCustomerPrice = parseFloat((baseSellerPrice + baseGstAmount).toFixed(2));
 
           return (
             <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', gap: '16px' }}>

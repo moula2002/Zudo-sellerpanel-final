@@ -866,13 +866,13 @@ const AddProduct = () => {
                 gridColumn: '1 / -1',
                 background: 'rgba(99, 102, 241, 0.08)',
                 border: '1px solid rgba(99, 102, 241, 0.25)',
-                padding: '12px 16px',
-                borderRadius: '10px',
+                padding: '14px 18px',
+                borderRadius: '12px',
                 display: 'flex',
                 flexWrap: 'wrap',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '12px'
+                gap: '16px'
               }}>
                 <div>
                   <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Package Specification</span>
@@ -881,9 +881,20 @@ const AddProduct = () => {
                   </div>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
-                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Base Price</span>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
                     ₹{Number(formData.sellerB2bPrice || 0).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#16a34a', textTransform: 'uppercase', fontWeight: 700 }}>
+                    Customer Price ({parseFloat(formData.gstPercent || 0)}% GST)
+                  </span>
+                  <div style={{ fontSize: '16px', fontWeight: 900, color: '#16a34a' }}>
+                    ₹{(Number(formData.sellerB2bPrice || 0) + (Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)}
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginLeft: '6px' }}>
+                      (+₹{((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)} GST)
+                    </span>
                   </div>
                 </div>
               </div>
