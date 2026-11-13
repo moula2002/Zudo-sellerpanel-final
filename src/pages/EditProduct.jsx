@@ -35,8 +35,8 @@ const EditProduct = () => {
     moq: '1',
     unit: 'BAG',
     packagingType: 'BAG',
-    measurementUnit: 'BAG',
-    measurementBasis: 'BAG',
+    measurementUnit: 'KG',
+    measurementBasis: 'KG',
     unitSize: '1',
     categoryId: '',
     subCategoryId: '',
@@ -63,7 +63,7 @@ const EditProduct = () => {
 
   // Shared Custom Packaging & Measurement Unit Management
   const [packagingOptions, setPackagingOptions] = useState(['BAG', 'BOX']);
-  const [measurementOptions, setMeasurementOptions] = useState(['BAG', 'BOX']);
+  const [measurementOptions, setMeasurementOptions] = useState(['KG', 'LITRE']);
 
   // Modals for adding custom units
   const [showAddPackagingModal, setShowAddPackagingModal] = useState(false);
@@ -84,7 +84,7 @@ const EditProduct = () => {
   const [unitDeleteFeedback, setUnitDeleteFeedback] = useState({ type: '', text: '' });
 
   const DEFAULT_PACKAGING = ['BAG', 'BOX'];
-  const DEFAULT_MEASUREMENTS = ['BAG', 'BOX'];
+  const DEFAULT_MEASUREMENTS = ['KG', 'LITRE'];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -120,29 +120,32 @@ const EditProduct = () => {
           ? String(p.commissionValue)
           : '2';
 
-        const rawLoadedUnit = (p.unit || 'BAG').toString().trim().toUpperCase();
-        const loadedUnit = rawLoadedUnit || 'BAG';
+        const rawLoadedUnit = (p.unit || p.packagingType || 'BAG').toString().trim().toUpperCase();
+        const loadedUnit = (rawLoadedUnit === 'KG' || rawLoadedUnit === 'LITRE' || rawLoadedUnit === 'LTR') ? 'BAG' : (rawLoadedUnit || 'BAG');
         const loadedCustom = Array.isArray(p.customUnits)
-          ? p.customUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_PACKAGING.includes(u))
+          ? p.customUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')
           : [];
         const globalCustomPkg = Array.isArray(customRes.data?.packagingUnits || customRes.data?.mainUnits)
-          ? (customRes.data.packagingUnits || customRes.data.mainUnits).map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_PACKAGING.includes(u))
+          ? (customRes.data.packagingUnits || customRes.data.mainUnits).map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')
           : [];
-        const mergedPkgOptions = Array.from(new Set([...DEFAULT_PACKAGING, ...loadedCustom, ...globalCustomPkg, loadedUnit]));
+        const mergedPkgOptions = Array.from(new Set([...DEFAULT_PACKAGING, ...loadedCustom, ...globalCustomPkg, loadedUnit]))
+          .filter(u => u && u !== 'KG' && u !== 'LITRE' && u !== 'LTR');
         setPackagingOptions(mergedPkgOptions);
 
         const loadedMeasCustom = Array.isArray(p.customMeasurementUnits)
-          ? p.customMeasurementUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_MEASUREMENTS.includes(u))
+          ? p.customMeasurementUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_MEASUREMENTS.includes(u) && u !== 'BAG' && u !== 'BOX')
           : [];
         const globalCustomMeas = Array.isArray(customRes.data?.measurementUnits || customRes.data?.variantUnits)
-          ? (customRes.data.measurementUnits || customRes.data.variantUnits).map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_MEASUREMENTS.includes(u))
+          ? (customRes.data.measurementUnits || customRes.data.variantUnits).map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_MEASUREMENTS.includes(u) && u !== 'BAG' && u !== 'BOX')
           : [];
-        const loadedMeasVal = (p.measurementBasis || p.measurementUnit || 'BAG').toString().trim().toUpperCase();
-        const mergedMeasOptions = Array.from(new Set([...DEFAULT_MEASUREMENTS, ...loadedMeasCustom, ...globalCustomMeas, loadedMeasVal]));
+        const rawMeasVal = (p.measurementBasis || p.measurementUnit || 'KG').toString().trim().toUpperCase();
+        const loadedMeasVal = (rawMeasVal === 'BAG' || rawMeasVal === 'BOX') ? 'KG' : rawMeasVal;
+        const mergedMeasOptions = Array.from(new Set([...DEFAULT_MEASUREMENTS, ...loadedMeasCustom, ...globalCustomMeas, loadedMeasVal]))
+          .filter(u => u && u !== 'BAG' && u !== 'BOX');
         setMeasurementOptions(mergedMeasOptions);
 
         const loadedPackaging = (p.packagingType || loadedUnit || 'BAG').toUpperCase();
-        const loadedMeas = (p.measurementBasis || p.measurementUnit || 'BAG').toUpperCase();
+        const loadedMeas = loadedMeasVal;
         const loadedPriceBasis = p.priceBasis || (p.isPackagePrice ? 'per_package' : 'per_unit');
 
         let resolvedUnitSize = Number(p.unitSize);
@@ -194,13 +197,13 @@ const EditProduct = () => {
         });
 
         const parsePacketSize = (sizeStr) => {
-          if (!sizeStr) return { val: '', unit: 'BAG' };
+          if (!sizeStr) return { val: '', unit: 'KG' };
           const valMatch = sizeStr.match(/^[\d\.]+/);
           const val = valMatch ? valMatch[0] : '';
           const unit = sizeStr.slice(val.length).trim().toUpperCase();
           return {
             val,
-            unit: unit || 'BAG'
+            unit: unit || 'KG'
           };
         };
 
@@ -211,8 +214,14 @@ const EditProduct = () => {
           const vSeller = vPriceBasis === 'per_unit' && v.sellerPricePerBaseUnit !== undefined && v.sellerPricePerBaseUnit !== null
             ? String(v.sellerPricePerBaseUnit)
             : (v.sellerPrice !== undefined && v.sellerPrice !== null ? String(v.sellerPrice) : (v.price ? String(v.price) : ''));
-          const variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'BAG').toUpperCase();
-          const variantPkg = (v.packagingType || loadedPackaging || 'BAG').toUpperCase();
+          let variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'KG').toUpperCase();
+          if (variantMeas === 'BAG' || variantMeas === 'BOX') {
+            variantMeas = 'KG';
+          }
+          let variantPkg = (v.packagingType || loadedPackaging || 'BAG').toUpperCase();
+          if (variantPkg === 'KG' || variantPkg === 'LITRE' || variantPkg === 'LTR') {
+            variantPkg = 'BAG';
+          }
           return {
             packetSizeVal: vUnitSize,
             packetSizeUnit: variantMeas,
@@ -264,7 +273,7 @@ const EditProduct = () => {
     ...b2bVariants, 
     { 
       packetSizeVal: '', 
-      packetSizeUnit: formData.measurementUnit || 'BAG',
+      packetSizeUnit: formData.measurementUnit || 'KG',
       packagingType: formData.unit || 'BAG',
       priceBasis: 'per_unit',
       sellerPrice: '', 
@@ -442,13 +451,13 @@ const EditProduct = () => {
 
       // Reset main form selection if deleted
       if ((formData.measurementUnit || '').toUpperCase() === clean) {
-        setFormData(prev => ({ ...prev, measurementUnit: 'BAG', measurementBasis: 'BAG' }));
+        setFormData(prev => ({ ...prev, measurementUnit: 'KG', measurementBasis: 'KG' }));
       }
 
       // Reset any variant rows using this measurement
       setB2bVariants(prev => prev.map(v => ({
         ...v,
-        packetSizeUnit: (v.packetSizeUnit || '').toUpperCase() === clean ? 'BAG' : v.packetSizeUnit
+        packetSizeUnit: (v.packetSizeUnit || '').toUpperCase() === clean ? 'KG' : v.packetSizeUnit
       })));
 
       setUnitDeleteFeedback({
@@ -521,7 +530,7 @@ const EditProduct = () => {
             }
           }
 
-          const pkgPrice = Math.round(rawPrice * uSize * 100) / 100;
+          const pkgPrice = rawPrice;
           const basePrice = rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
@@ -547,13 +556,13 @@ const EditProduct = () => {
 
       const customUnitsToSave = Array.from(new Set(
         packagingOptions
-          .filter(u => !DEFAULT_PACKAGING.includes(u))
-          .concat(formData.unit && !DEFAULT_PACKAGING.includes(formData.unit) ? [formData.unit] : [])
+          .filter(u => !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')
+          .concat(formData.unit && !DEFAULT_PACKAGING.includes(formData.unit) && formData.unit !== 'KG' && formData.unit !== 'LITRE' ? [formData.unit] : [])
       ));
 
       const customMeasToSave = Array.from(new Set(
         measurementOptions
-          .filter(u => !DEFAULT_MEASUREMENTS.includes(u.toUpperCase()))
+          .filter(u => !DEFAULT_MEASUREMENTS.includes(u.toUpperCase()) && u.toUpperCase() !== 'BAG' && u.toUpperCase() !== 'BOX')
           .map(u => u.toUpperCase())
       ));
 
@@ -845,11 +854,11 @@ const EditProduct = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. BAG or BOX)</span>
+                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG or LITRE)</span>
                   </label>
                   <select
                     className="input-field"
-                    value={formData.measurementUnit || 'BAG'}
+                    value={formData.measurementUnit || 'KG'}
                     onChange={e => {
                       if (e.target.value === '__ADD_CUSTOM__') {
                         setActiveVariantAddIndex(null);
@@ -917,7 +926,7 @@ const EditProduct = () => {
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
-                      ₹{(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()} (₹{Number(formData.sellerB2bPrice || 0)} × {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()})
+                      ₹{Number(formData.sellerB2bPrice || 0).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()}
                     </div>
                   </div>
                 </div>
@@ -1089,7 +1098,7 @@ const EditProduct = () => {
                               1 {vPkgType} = {vUnitSize} {vMeas}
                             </span>
                             <span style={{ color: '#22c55e', fontWeight: 700 }}>
-                              Payout / {vPkgType}: ₹{vPkgPrice.toFixed(2)} {vGstRate > 0 ? `(₹${vTotalWithGst.toFixed(2)} incl. ${vGstRate}% GST)` : ''}
+                              Payout / {vPkgType}: ₹{vSeller.toFixed(2)}
                             </span>
                           </div>
                         </div>
@@ -1661,7 +1670,7 @@ const EditProduct = () => {
 
                   {measurementOptions.filter(m => !DEFAULT_MEASUREMENTS.includes(m.toUpperCase())).length === 0 ? (
                     <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '12px 0' }}>
-                      No custom measurement units added yet. Default measurement units (BAG, BOX) are always available.
+                      No custom measurement units added yet. Default measurement units (KG, LITRE) are always available.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>

@@ -32,7 +32,7 @@ const AddProduct = () => {
 
   // Shared Custom Packaging & Measurement Unit Management
   const [packagingOptions, setPackagingOptions] = useState(['BAG', 'BOX']);
-  const [measurementOptions, setMeasurementOptions] = useState(['BAG', 'BOX']);
+  const [measurementOptions, setMeasurementOptions] = useState(['KG', 'LITRE']);
 
   // Modals for adding custom units
   const [showAddPackagingModal, setShowAddPackagingModal] = useState(false);
@@ -53,7 +53,7 @@ const AddProduct = () => {
   const [unitDeleteFeedback, setUnitDeleteFeedback] = useState({ type: '', text: '' });
 
   const DEFAULT_PACKAGING = ['BAG', 'BOX'];
-  const DEFAULT_MEASUREMENTS = ['BAG', 'BOX'];
+  const DEFAULT_MEASUREMENTS = ['KG', 'LITRE'];
 
   const [formData, setFormData] = useState({
     name: '',
@@ -68,8 +68,8 @@ const AddProduct = () => {
     moq: 1,
     unit: 'BAG',
     packagingType: 'BAG',
-    measurementUnit: 'BAG',
-    measurementBasis: 'BAG',
+    measurementUnit: 'KG',
+    measurementBasis: 'KG',
     unitSize: 1,
     sellerId: '',
     stock: 0,
@@ -95,16 +95,16 @@ const AddProduct = () => {
         if (Array.isArray(pkgList)) {
           const filteredUnits = pkgList
             .map(u => String(u || '').trim().toUpperCase())
-            .filter(u => u && !DEFAULT_PACKAGING.includes(u));
-          setPackagingOptions(Array.from(new Set([...DEFAULT_PACKAGING, ...filteredUnits])));
+            .filter(u => u && !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR');
+          setPackagingOptions(Array.from(new Set([...DEFAULT_PACKAGING, ...filteredUnits])).filter(u => u !== 'KG' && u !== 'LITRE' && u !== 'LTR'));
         }
 
         const measList = customRes.data?.measurementUnits || customRes.data?.variantUnits || [];
         if (Array.isArray(measList)) {
           const filteredMeas = measList
             .map(u => String(u || '').trim().toUpperCase())
-            .filter(u => u && !DEFAULT_MEASUREMENTS.includes(u));
-          setMeasurementOptions(Array.from(new Set([...DEFAULT_MEASUREMENTS, ...filteredMeas])));
+            .filter(u => u && !DEFAULT_MEASUREMENTS.includes(u) && u !== 'BAG' && u !== 'BOX');
+          setMeasurementOptions(Array.from(new Set([...DEFAULT_MEASUREMENTS, ...filteredMeas])).filter(u => u !== 'BAG' && u !== 'BOX'));
         }
         
         // Auto-populate logged-in seller's ID and details
@@ -164,7 +164,7 @@ const AddProduct = () => {
     ...b2bVariants, 
     { 
       packetSizeVal: '', 
-      packetSizeUnit: formData.measurementUnit || 'BAG',
+      packetSizeUnit: formData.measurementUnit || 'KG',
       packagingType: formData.unit || 'BAG',
       priceBasis: 'per_unit',
       sellerPrice: '', 
@@ -342,13 +342,13 @@ const AddProduct = () => {
 
       // Reset main form selection if deleted
       if ((formData.measurementUnit || '').toUpperCase() === clean) {
-        setFormData(prev => ({ ...prev, measurementUnit: 'BAG', measurementBasis: 'BAG' }));
+        setFormData(prev => ({ ...prev, measurementUnit: 'KG', measurementBasis: 'KG' }));
       }
 
       // Reset any variant rows using this measurement
       setB2bVariants(prev => prev.map(v => ({
         ...v,
-        packetSizeUnit: (v.packetSizeUnit || '').toUpperCase() === clean ? 'BAG' : v.packetSizeUnit
+        packetSizeUnit: (v.packetSizeUnit || '').toUpperCase() === clean ? 'KG' : v.packetSizeUnit
       })));
 
       setUnitDeleteFeedback({
@@ -443,15 +443,15 @@ const AddProduct = () => {
       data.append('isPackagePrice', false);
       const customUnitsToSave = Array.from(new Set(
         packagingOptions
-          .filter(u => !DEFAULT_PACKAGING.includes(u))
-          .concat(formData.unit && !DEFAULT_PACKAGING.includes(formData.unit) ? [formData.unit] : [])
+          .filter(u => !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')
+          .concat(formData.unit && !DEFAULT_PACKAGING.includes(formData.unit) && formData.unit !== 'KG' && formData.unit !== 'LITRE' ? [formData.unit] : [])
       ));
       data.append('customUnits', JSON.stringify(customUnitsToSave));
       data.append('customPackagingUnits', JSON.stringify(customUnitsToSave));
 
       const customMeasToSave = Array.from(new Set(
         measurementOptions
-          .filter(u => !DEFAULT_MEASUREMENTS.includes(u.toUpperCase()))
+          .filter(u => !DEFAULT_MEASUREMENTS.includes(u.toUpperCase()) && u.toUpperCase() !== 'BAG' && u.toUpperCase() !== 'BOX')
           .map(u => u.toUpperCase())
       ));
       data.append('customMeasurementUnits', JSON.stringify(customMeasToSave));
@@ -481,7 +481,7 @@ const AddProduct = () => {
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
-          const pkgPrice = Math.round(rawPrice * uSize * 100) / 100;
+          const pkgPrice = rawPrice; // Seller Base Price is NOT multiplied by uSize
           const basePrice = rawPrice;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
@@ -806,12 +806,12 @@ const AddProduct = () => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
-                  Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. BAG or BOX)</span>
+                  Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG or LITRE)</span>
                 </label>
                 <select 
                   name="measurementUnit" 
                   className="input-field" 
-                  value={formData.measurementUnit || 'BAG'} 
+                  value={formData.measurementUnit || 'KG'} 
                   onChange={(e) => {
                     if (e.target.value === '__ADD_CUSTOM__') {
                       setActiveVariantAddIndex(null);
@@ -880,7 +880,7 @@ const AddProduct = () => {
                 <div>
                   <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
                   <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
-                    ₹{(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()} (₹{Number(formData.sellerB2bPrice || 0)} × {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()})
+                    ₹{Number(formData.sellerB2bPrice || 0).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()}
                   </div>
                 </div>
               </div>
@@ -1100,7 +1100,7 @@ const AddProduct = () => {
                             1 {vPkgType} = {vUnitSize} {vMeas}
                           </span>
                           <span style={{ color: '#22c55e', fontWeight: 700 }}>
-                            Payout / {vPkgType}: ₹{vPkgPrice.toFixed(2)} {vGstRate > 0 ? `(₹${vTotalWithGst.toFixed(2)} incl. ${vGstRate}% GST)` : ''}
+                            Payout / {vPkgType}: ₹{vSellerPrice.toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -1714,7 +1714,7 @@ const AddProduct = () => {
 
                   {measurementOptions.filter(m => !DEFAULT_MEASUREMENTS.includes(m.toUpperCase())).length === 0 ? (
                     <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '12px 0' }}>
-                      No custom measurement units added yet. Default measurement units (BAG, BOX) are always available.
+                      No custom measurement units added yet. Default measurement units (KG, LITRE) are always available.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>

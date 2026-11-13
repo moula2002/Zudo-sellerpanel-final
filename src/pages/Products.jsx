@@ -440,8 +440,8 @@ const Products = () => {
                             ? Number(product.b2b[0].sellerPrice)
                             : Number(product.b2bPrice || product.price || 0))));
 
-              const baseSellerPrice = isPackage ? (rawBase / uSize) : rawBase;
-              const baseCustomerPrice = baseSellerPrice + (baseSellerPrice * displayGstRate) / 100;
+              const baseSellerPrice = rawBase;
+              const baseCustomerPrice = product.price ? Number(product.price) : (baseSellerPrice + (baseSellerPrice * displayGstRate) / 100);
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -587,8 +587,8 @@ const Products = () => {
                         ? Number(product.b2b[0].sellerPrice)
                         : Number(product.b2bPrice || product.price || 0))));
 
-          const baseSellerPrice = isPackage ? (rawBase / uSize) : rawBase;
-          const baseCustomerPrice = baseSellerPrice + (baseSellerPrice * displayGstRate) / 100;
+          const baseSellerPrice = rawBase;
+          const baseCustomerPrice = product.price ? Number(product.price) : (baseSellerPrice + (baseSellerPrice * displayGstRate) / 100);
 
           return (
             <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', gap: '16px' }}>
