@@ -1,29 +1,43 @@
-import React, { useState, useEffect, useRef } from 'react';
-import api, { BASE_URL } from '../utils/api';
+import { useState, useEffect, useRef } from 'react';
+import api from '../utils/api';
 import { 
   FileText, Download, Plus, AlertCircle, Calendar, CheckCircle, 
-  RefreshCw, Upload, X, Eye, Image as ImageIcon, Check, Hash, ExternalLink, Trash2, Layers 
+  RefreshCw, Upload, X, Eye, Image as ImageIcon, ExternalLink, Trash2, Layers 
 } from 'lucide-react';
 import Layout from '../components/Layout';
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+const getInvoiceReference = (invoice) => {
+  if (invoice.orderNumber) return `#${String(invoice.orderNumber).padStart(5, '0')}`;
+  return `#${invoice.invoiceNumber || invoice.invoiceSequenceNumber || invoice._id.toString().substring(0, 6)}`;
+};
+
+const getOrderDisplayId = (order) => {
+  if (order.orderNumber) return String(order.orderNumber).padStart(5, '0');
+  return order.orderId || order.orderRef || order._id.toString().slice(-6).toUpperCase();
+};
+
+const getInvoicedOrderIds = (invoices) => new Set(
+  (invoices || []).flatMap(invoice => [invoice.orderId, ...(invoice.orders || [])])
+    .filter(Boolean)
+    .map(orderId => orderId._id?.toString() || orderId.toString())
+);
+
 const Invoices = () => {
   const [invoices, setInvoices] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [nextExpectedNumber, setNextExpectedNumber] = useState(1);
-  const [lastInvoiceNumber, setLastInvoiceNumber] = useState(null);
-  const [usedNumbers, setUsedNumbers] = useState([]);
+  const [orderSearches, setOrderSearches] = useState({});
+  const [activeOrderEntryId, setActiveOrderEntryId] = useState(null);
 
-  // Multi-invoice form entries:
-  // Each entry: { id, startDate, endDate, invoiceNumber, images: [ { file, previewUrl, name, size, type } ] }
   const [invoiceEntries, setInvoiceEntries] = useState([
     {
       id: 1,
       startDate: '',
       endDate: '',
-      invoiceNumber: '1',
+      orderId: '',
       images: []
     }
   ]);
@@ -49,7 +63,7 @@ const Invoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-    fetchNextSequence();
+    fetchOrders();
   }, []);
 
   // Clean up blob URLs on unmount
@@ -78,29 +92,40 @@ const Invoices = () => {
     };
   }, []);
 
-  const fetchNextSequence = async () => {
+  async function fetchOrders() {
     try {
-      const { data } = await api.get('/seller-invoices/next-number');
-      if (data) {
-        const nextNum = data.nextExpectedNumber || 1;
-        setNextExpectedNumber(nextNum);
-        setLastInvoiceNumber(data.lastInvoiceNumber || null);
-        setUsedNumbers(data.usedNumbers || []);
-
-        // Prepopulate first entry's invoiceNumber if not customized
-        setInvoiceEntries(prev => {
-          if (prev.length === 1 && (!prev[0].invoiceNumber || prev[0].invoiceNumber === '1')) {
-            return [{ ...prev[0], invoiceNumber: String(nextNum) }];
-          }
-          return prev;
-        });
-      }
+      const { data } = await api.get('/seller-invoices/orders');
+      setOrders(data || []);
     } catch (err) {
-      console.warn('Could not fetch next sequence number:', err);
+      const message = err.response?.data?.message || '';
+      if (err.response?.status === 404 || (err.response?.status === 400 && message === 'Invalid invoice ID')) {
+        try {
+          const [ordersResponse, invoicesResponse] = await Promise.all([
+            api.get('/sellers/orders'),
+            api.get('/seller-invoices/my-invoices')
+          ]);
+          const invoicedOrderIds = getInvoicedOrderIds(invoicesResponse.data);
+          setOrders((ordersResponse.data || [])
+            .filter(order => !invoicedOrderIds.has(order._id.toString()))
+            .map(order => ({
+              _id: order._id,
+              orderNumber: order.orderNumber || null,
+              displayId: getOrderDisplayId(order),
+              createdAt: order.createdAt,
+              customerName: order.userId?.businessName || order.userId?.name || 'Customer'
+            })));
+          setError('');
+          return;
+        } catch (fallbackError) {
+          setError(fallbackError.response?.data?.message || 'Failed to load your orders.');
+          return;
+        }
+      }
+      setError(message || 'Failed to load your orders.');
     }
-  };
+  }
 
-  const fetchInvoices = async () => {
+  async function fetchInvoices() {
     try {
       const { data } = await api.get('/seller-invoices/my-invoices');
       setInvoices(data || []);
@@ -115,10 +140,10 @@ const Invoices = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   // Loads primary thumbnail image
-  const loadAuthenticatedPrimaryImage = async (invoiceId) => {
+  async function loadAuthenticatedPrimaryImage(invoiceId) {
     if (!invoiceId || imageBlobs[invoiceId]?.primary || imageLoading[`${invoiceId}_primary`]) return;
 
     setImageLoading(prev => ({ ...prev, [`${invoiceId}_primary`]: true }));
@@ -131,12 +156,12 @@ const Invoices = () => {
         ...prev,
         [invoiceId]: { ...(prev[invoiceId] || {}), primary: blobUrl }
       }));
-    } catch (err) {
+    } catch {
       // Missing image is normal for legacy records without images
     } finally {
       setImageLoading(prev => ({ ...prev, [`${invoiceId}_primary`]: false }));
     }
-  };
+  }
 
   // Loads specific image by imageId for modal gallery
   const loadAuthenticatedImageById = async (invoiceId, imageId) => {
@@ -160,54 +185,6 @@ const Invoices = () => {
     }
   };
 
-  // --- Add & Remove Invoice Entries ---
-  const handleAddInvoiceEntry = () => {
-    setError('');
-    setInvoiceEntries(prev => {
-      // Suggest the next sequential invoice number based on previous entries and expected number
-      const existingEnteredNums = prev
-        .map(e => parseInt(e.invoiceNumber, 10))
-        .filter(n => !isNaN(n) && n > 0);
-
-      const maxSoFar = existingEnteredNums.length > 0 
-        ? Math.max(...existingEnteredNums, nextExpectedNumber - 1)
-        : nextExpectedNumber - 1;
-
-      const suggestedNumber = String(maxSoFar + 1);
-
-      // Inherit the latest entry's date range if available for seller convenience
-      const lastEntry = prev[prev.length - 1];
-
-      return [
-        ...prev,
-        {
-          id: Date.now() + Math.random(),
-          startDate: lastEntry?.startDate || '',
-          endDate: lastEntry?.endDate || '',
-          invoiceNumber: suggestedNumber,
-          images: []
-        }
-      ];
-    });
-  };
-
-  const handleRemoveInvoiceEntry = (entryId) => {
-    if (invoiceEntries.length <= 1) {
-      setError('At least one invoice entry is required.');
-      return;
-    }
-    setError('');
-    setInvoiceEntries(prev => {
-      const target = prev.find(e => e.id === entryId);
-      if (target?.images) {
-        target.images.forEach(img => {
-          if (img.previewUrl) URL.revokeObjectURL(img.previewUrl);
-        });
-      }
-      return prev.filter(e => e.id !== entryId);
-    });
-  };
-
   const updateEntryField = (entryId, field, value) => {
     setInvoiceEntries(prev => prev.map(entry => {
       if (entry.id === entryId) {
@@ -215,6 +192,39 @@ const Invoices = () => {
       }
       return entry;
     }));
+  };
+
+  const handleAddInvoiceEntry = () => {
+    setError('');
+    setInvoiceEntries(prev => {
+      const lastEntry = prev[prev.length - 1];
+      return [
+        ...prev,
+        {
+          id: Date.now() + Math.random(),
+          startDate: lastEntry?.startDate || '',
+          endDate: lastEntry?.endDate || '',
+          orderId: '',
+          images: []
+        }
+      ];
+    });
+  };
+
+  const handleRemoveInvoiceEntry = (entryId) => {
+    if (invoiceEntries.length === 1) return;
+    const target = invoiceEntries.find(entry => entry.id === entryId);
+    (target?.images || []).forEach(image => {
+      if (image.previewUrl) URL.revokeObjectURL(image.previewUrl);
+    });
+    setInvoiceEntries(prev => prev.filter(entry => entry.id !== entryId));
+    setOrderSearches(prev => {
+      const next = { ...prev };
+      delete next[entryId];
+      return next;
+    });
+    setActiveOrderEntryId(current => current === entryId ? null : current);
+    setError('');
   };
 
   // --- Multi-Image Handling Per Invoice Entry ---
@@ -305,56 +315,29 @@ const Invoices = () => {
     setError('');
     setSuccessMsg('');
 
-    // 1. Validation across all invoice entries
-    const seenNumbers = new Set();
-
-    for (let i = 0; i < invoiceEntries.length; i++) {
-      const entry = invoiceEntries[i];
-      const entryLabel = `Invoice Entry #${i + 1}`;
-
+    const selectedOrderIds = new Set();
+    for (let index = 0; index < invoiceEntries.length; index += 1) {
+      const entry = invoiceEntries[index];
+      const entryLabel = `Invoice entry ${index + 1}`;
       if (!entry.startDate || !entry.endDate) {
         setError(`${entryLabel}: Please select both Start Date and End Date.`);
         return;
       }
-
       if (new Date(entry.startDate) > new Date(entry.endDate)) {
         setError(`${entryLabel}: Start Date cannot be after End Date.`);
         return;
       }
-
-      const trimmedNum = (entry.invoiceNumber || '').toString().trim();
-      if (!trimmedNum) {
-        setError(`${entryLabel}: Please enter a sequential invoice number.`);
+      if (!entry.orderId || !orders.some(order => order._id === entry.orderId)) {
+        setError(`${entryLabel}: Please select a valid Order ID.`);
         return;
       }
-
-      if (!/^\d+$/.test(trimmedNum)) {
-        setError(`${entryLabel}: Invoice number must be a sequential positive number (1, 2, 3...).`);
+      if (selectedOrderIds.has(entry.orderId)) {
+        setError(`Order #${orders.find(order => order._id === entry.orderId)?.displayId || entry.orderId} is selected more than once.`);
         return;
       }
-
-      const numVal = parseInt(trimmedNum, 10);
-      if (numVal <= 0) {
-        setError(`${entryLabel}: Invoice number must be greater than 0.`);
-        return;
-      }
-
-      if (seenNumbers.has(trimmedNum)) {
-        setError(`Duplicate invoice number "${trimmedNum}" found in your entries. Each invoice must have an independent, unique invoice number.`);
-        return;
-      }
-      seenNumbers.add(trimmedNum);
-
-      // Check against already existing used numbers in DB
-      if (usedNumbers.includes(trimmedNum)) {
-        setError(`Invoice number "${trimmedNum}" has already been used in an existing invoice. Please choose another sequential number.`);
-        return;
-      }
-
-      // Validate image count (Optional, max 5)
-      const imgCount = entry.images ? entry.images.length : 0;
-      if (imgCount > 5) {
-        setError(`${entryLabel} (Invoice #${trimmedNum}): Exceeds maximum 5 images.`);
+      selectedOrderIds.add(entry.orderId);
+      if ((entry.images || []).length > 5) {
+        setError(`${entryLabel}: Maximum 5 images are allowed.`);
         return;
       }
     }
@@ -365,18 +348,15 @@ const Invoices = () => {
     try {
       const formData = new FormData();
 
-      // Build metadata array
       const metadata = invoiceEntries.map(entry => ({
         startDate: entry.startDate,
         endDate: entry.endDate,
-        invoiceNumber: entry.invoiceNumber.toString().trim()
+        orderId: entry.orderId
       }));
       formData.append('invoices', JSON.stringify(metadata));
-
-      // Append files with keyed names: invoice_{index}_image_{imageIndex}
-      invoiceEntries.forEach((entry, invIdx) => {
-        (entry.images || []).forEach((imgObj, imgIdx) => {
-          formData.append(`invoice_${invIdx}_image_${imgIdx}`, imgObj.file);
+      invoiceEntries.forEach((entry, invoiceIndex) => {
+        (entry.images || []).forEach((imgObj, imageIndex) => {
+          formData.append(`invoice_${invoiceIndex}_image_${imageIndex}`, imgObj.file);
         });
       });
 
@@ -399,26 +379,26 @@ const Invoices = () => {
         });
       });
 
-      // Reset form to 1 clean entry
-      const nextNum = (data.invoices && data.invoices.length > 0)
-        ? (Math.max(...data.invoices.map(i => parseInt(i.invoiceNumber, 10)).filter(n => !isNaN(n))) + 1)
-        : nextExpectedNumber + invoiceEntries.length;
-
       setInvoiceEntries([
         {
           id: Date.now(),
           startDate: '',
           endDate: '',
-          invoiceNumber: String(nextNum),
+          orderId: '',
           images: []
         }
       ]);
-
-      const count = data.invoices?.length || invoiceEntries.length;
-      setSuccessMsg(`Successfully generated ${count} invoice(s)! Records and raw binary images are saved in MongoDB.`);
+      setOrderSearches({});
+      setActiveOrderEntryId(null);
+      const orderReferences = invoiceEntries.map(entry => {
+        const order = orders.find(item => item._id === entry.orderId);
+        return `#${order?.displayId || entry.orderId}`;
+      });
+      const invoiceCount = data.invoices?.length || invoiceEntries.length;
+      setSuccessMsg(`Successfully generated ${invoiceCount} invoice(s) for ${orderReferences.join(', ')}.`);
 
       await fetchInvoices();
-      await fetchNextSequence();
+      await fetchOrders();
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to generate invoice(s).';
       setError(msg);
@@ -462,7 +442,7 @@ const Invoices = () => {
           const text = await err.response.data.text();
           const json = JSON.parse(text);
           setError(json.message || 'Failed to download invoice PDF.');
-        } catch (e) {
+        } catch {
           setError('Failed to download invoice PDF. Please try again.');
         }
       } else {
@@ -475,7 +455,7 @@ const Invoices = () => {
 
   const handleDelete = async (invoice) => {
     const invId = invoice._id;
-    const invNumberStr = invoice.invoiceNumber ? `#${invoice.invoiceNumber}` : `#${invId.toString().substring(0, 8)}`;
+    const invNumberStr = getInvoiceReference(invoice);
     const confirmDelete = window.confirm(`Are you sure you want to delete Invoice ${invNumberStr}? This will safely delete associated images from MongoDB.`);
     if (!confirmDelete) return;
 
@@ -505,7 +485,7 @@ const Invoices = () => {
 
       setInvoices(prev => prev.filter(item => item._id !== invId));
       setSuccessMsg(`Invoice ${invNumberStr} deleted successfully.`);
-      await fetchNextSequence();
+      await fetchOrders();
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to delete invoice.';
       setError(msg);
@@ -519,7 +499,7 @@ const Invoices = () => {
     setSelectedInvoice(invoice);
     setShowModal(true);
 
-    // Fetch full invoice image details (all 1-5 images)
+    // Fetch all uploaded images; invoices without images remain valid.
     try {
       const { data } = await api.get(`/seller-invoices/${invoice._id}/images`);
       if (Array.isArray(data)) {
@@ -538,58 +518,16 @@ const Invoices = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-main)' }}>Invoices</h1>
-          <p style={{ color: 'var(--text-dim)' }}>Generate, track and upload sequential invoices with multiple documents for order settlements.</p>
-        </div>
-
-        {/* Sequential Sequence Banner */}
-        <div style={{
-          background: 'rgba(59, 130, 246, 0.08)',
-          border: '1px solid rgba(59, 130, 246, 0.2)',
-          borderRadius: '16px',
-          padding: '12px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px'
-        }}>
-          <div>
-            <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#60a5fa', fontWeight: 700, letterSpacing: '0.5px', display: 'block' }}>
-              NEXT SUGGESTED INVOICE
-            </span>
-            <span style={{ fontSize: '20px', fontWeight: 800, color: '#3b82f6' }}>
-              #{nextExpectedNumber}
-            </span>
-          </div>
-          {lastInvoiceNumber && (
-            <div style={{ borderLeft: '1px solid rgba(59, 130, 246, 0.2)', paddingLeft: '16px' }}>
-              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, display: 'block' }}>
-                LAST GENERATED
-              </span>
-              <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
-                #{lastInvoiceNumber}
-              </span>
-            </div>
-          )}
+          <p style={{ color: 'var(--text-dim)' }}>Generate and track invoices for your orders.</p>
         </div>
       </div>
 
-      {/* GENERATE NEW INVOICE(S) FORM */}
+      {/* GENERATE NEW INVOICE FORM */}
       <div className="glass-card" style={{ padding: '28px', borderRadius: '24px', marginBottom: '32px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileText size={20} style={{ color: '#3b82f6' }} />
             <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Generate Invoices</h2>
-            {invoiceEntries.length > 1 && (
-              <span style={{ 
-                background: 'rgba(59, 130, 246, 0.15)', 
-                color: '#3b82f6', 
-                fontSize: '11px', 
-                fontWeight: 700, 
-                padding: '3px 8px', 
-                borderRadius: '8px' 
-              }}>
-                {invoiceEntries.length} Invoices
-              </span>
-            )}
           </div>
         </div>
 
@@ -609,6 +547,14 @@ const Invoices = () => {
         <form onSubmit={handleGenerateAll}>
           {invoiceEntries.map((entry, index) => {
             const entryImages = entry.images || [];
+            const entrySearch = orderSearches[entry.id] || '';
+            const availableOrders = orders.filter(order =>
+              !invoiceEntries.some(otherEntry => otherEntry.id !== entry.id && otherEntry.orderId === order._id)
+            );
+            const matchingOrders = availableOrders.filter(order => {
+              const query = entrySearch.trim().toLowerCase();
+              return !query || `#${order.displayId} ${order.customerName}`.toLowerCase().includes(query);
+            });
 
             return (
               <div 
@@ -622,48 +568,22 @@ const Invoices = () => {
                   position: 'relative'
                 }}
               >
-                {/* Entry Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{
-                      background: 'rgba(59, 130, 246, 0.15)',
-                      color: '#3b82f6',
-                      padding: '4px 10px',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: 800
-                    }}>
-                      Invoice #{index + 1}
-                    </span>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                      Invoice Number: #{entry.invoiceNumber || nextExpectedNumber}
-                    </span>
-                  </div>
-
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>Invoice Entry {index + 1}</strong>
                   {invoiceEntries.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveInvoiceEntry(entry.id)}
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: '#ef4444',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
+                      disabled={generating}
+                      className="btn-secondary"
+                      style={{ padding: '6px 10px', height: 'auto', fontSize: '12px', gap: '5px' }}
                     >
-                      <X size={14} /> Remove Entry
+                      <X size={14} /> Remove
                     </button>
                   )}
                 </div>
 
-                {/* Date and Invoice Number Inputs */}
+                {/* Required invoice fields */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '20px' }}>
                   {/* START DATE */}
                   <div>
@@ -695,37 +615,86 @@ const Invoices = () => {
                     />
                   </div>
 
-                  {/* MANUAL / SUGGESTED INVOICE NUMBER */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, letterSpacing: '0.5px' }}>
-                        INVOICE NUMBER *
-                      </label>
-                      <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: 600 }}>
-                        Auto-suggested
-                      </span>
-                    </div>
-                    <div style={{ position: 'relative' }}>
-                      <input 
-                        type="number" 
-                        min="1"
-                        step="1"
-                        placeholder="e.g. 1"
-                        className="input-field" 
-                        value={entry.invoiceNumber} 
-                        onChange={(e) => updateEntryField(entry.id, 'invoiceNumber', e.target.value)}
-                        style={{ paddingLeft: '36px', fontWeight: 700 }}
-                        required
-                      />
-                      <Hash size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                    </div>
-                    <p style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                      Unique sequential number for this seller.
-                    </p>
+                  {/* ORDER ID */}
+                  <div style={{ position: 'relative' }}>
+                    <label htmlFor={`invoice-order-search-${entry.id}`} style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                      ORDER ID *
+                    </label>
+                    <input
+                      id={`invoice-order-search-${entry.id}`}
+                      type="search"
+                      className="input-field"
+                      placeholder={availableOrders.length ? 'Search and select an order' : 'No un-invoiced orders available'}
+                      value={entry.orderId ? `#${orders.find(order => order._id === entry.orderId)?.displayId || entry.orderId}` : entrySearch}
+                      disabled={availableOrders.length === 0}
+                      autoComplete="off"
+                      onFocus={() => setActiveOrderEntryId(entry.id)}
+                      onChange={(e) => {
+                        setOrderSearches(prev => ({ ...prev, [entry.id]: e.target.value }));
+                        setActiveOrderEntryId(entry.id);
+                        updateEntryField(entry.id, 'orderId', '');
+                      }}
+                      onBlur={() => setTimeout(() => {
+                        setActiveOrderEntryId(current => current === entry.id ? null : current);
+                      }, 120)}
+                      style={{ fontWeight: 700 }}
+                      aria-required="true"
+                    />
+                    {activeOrderEntryId === entry.id && !entry.orderId && availableOrders.length > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        zIndex: 20,
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        maxHeight: '240px',
+                        overflowY: 'auto',
+                        marginTop: '4px',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '10px',
+                        background: 'var(--card-bg, #18181b)',
+                        boxShadow: '0 12px 24px rgba(0,0,0,0.3)'
+                      }}>
+                        {matchingOrders.map(order => (
+                            <button
+                              key={order._id}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                updateEntryField(entry.id, 'orderId', order._id);
+                                setOrderSearches(prev => ({ ...prev, [entry.id]: `#${order.displayId}` }));
+                                setActiveOrderEntryId(null);
+                                setError('');
+                              }}
+                              style={{
+                                display: 'block',
+                                width: '100%',
+                                padding: '10px 12px',
+                                border: 0,
+                                borderBottom: '1px solid var(--border-color)',
+                                background: 'transparent',
+                                color: 'var(--text-main)',
+                                textAlign: 'left',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <strong>#{order.displayId}</strong>
+                              <span style={{ display: 'block', marginTop: '2px', fontSize: '11px', color: 'var(--text-dim)' }}>
+                                {order.customerName}
+                              </span>
+                            </button>
+                          ))}
+                        {matchingOrders.length === 0 && (
+                          <div style={{ padding: '12px', color: 'var(--text-dim)', fontSize: '12px' }}>
+                            No matching orders.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* MULTIPLE IMAGE UPLOAD SECTION (1-5 Images) */}
+                {/* OPTIONAL IMAGE UPLOAD SECTION */}
                 <div style={{
                   background: 'rgba(255, 255, 255, 0.02)',
                   border: '1px dashed var(--border-color)',
@@ -750,7 +719,7 @@ const Invoices = () => {
                         </span>
                       </div>
                       <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
-                        Optional: Upload 1 to 5 images (Signed Invoice Front, Back, Supporting Docs). JPG, JPEG, PNG, WEBP (Max 10MB each).
+                        Optional: Upload up to 5 images. JPG, JPEG, PNG, WEBP (Max 10MB each).
                       </span>
                     </div>
                   </div>
@@ -780,7 +749,7 @@ const Invoices = () => {
                     >
                       <Upload size={32} style={{ color: '#3b82f6', margin: '0 auto 10px', display: 'block' }} />
                       <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-                        Click to select 1–5 invoice images
+                        Click to select up to 5 invoice images (optional)
                       </p>
                       <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
                         PNG, JPG, JPEG, WEBP up to 10MB per image. Multi-file selection supported.
@@ -913,7 +882,7 @@ const Invoices = () => {
           {generating && uploadProgress > 0 && (
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-dim)', marginBottom: '4px' }}>
-                <span>Uploading {invoiceEntries.length} invoice(s) and raw binary images to MongoDB...</span>
+                <span>Uploading invoice and optional images to MongoDB...</span>
                 <span>{uploadProgress}%</span>
               </div>
               <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
@@ -927,22 +896,12 @@ const Invoices = () => {
             <button
               type="button"
               onClick={handleAddInvoiceEntry}
+              disabled={generating}
               className="btn-secondary"
-              style={{
-                height: '46px',
-                padding: '0 20px',
-                fontSize: '13px',
-                fontWeight: 700,
-                gap: '8px',
-                borderRadius: '14px',
-                borderColor: 'rgba(59, 130, 246, 0.4)',
-                color: '#3b82f6',
-                background: 'rgba(59, 130, 246, 0.08)'
-              }}
+              style={{ height: '46px', padding: '0 20px', fontSize: '13px', fontWeight: 700, gap: '8px', borderRadius: '14px' }}
             >
-              <Plus size={16} /> + Add Another Invoice
+              <Plus size={16} /> Add Another Invoice
             </button>
-
             <button 
               type="submit" 
               className="btn-primary" 
@@ -955,7 +914,7 @@ const Invoices = () => {
                 </div>
               ) : (
                 <>
-                  <Plus size={18} /> Generate {invoiceEntries.length > 1 ? `${invoiceEntries.length} Invoices` : `Invoice #${invoiceEntries[0]?.invoiceNumber || nextExpectedNumber}`}
+                  <Plus size={18} /> {invoiceEntries.length === 1 ? 'Generate Invoice' : `Generate ${invoiceEntries.length} Invoices`}
                 </>
               )}
             </button>
@@ -972,7 +931,7 @@ const Invoices = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--glass-bg)' }}>
-              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>INVOICE NUMBER</th>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>ORDER ID</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>INVOICE IMAGES</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>BILLING PERIOD</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>INVOICE AMOUNT</th>
@@ -990,7 +949,7 @@ const Invoices = () => {
             ) : invoices.length === 0 ? (
               <tr>
                 <td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                  No invoices generated yet. Generate your first invoice (#1) above.
+                  No invoices generated yet. Generate your first invoice above.
                 </td>
               </tr>
             ) : invoices.map((inv) => {
@@ -1000,7 +959,7 @@ const Invoices = () => {
 
               return (
                 <tr key={inv._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
-                  {/* INVOICE NUMBER */}
+                  {/* ORDER / INVOICE REFERENCE */}
                   <td style={{ padding: '16px 24px', fontWeight: 700 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{
@@ -1011,7 +970,7 @@ const Invoices = () => {
                         fontSize: '13px',
                         fontWeight: 800
                       }}>
-                        #{inv.invoiceNumber || inv.invoiceSequenceNumber || inv._id.toString().substring(0, 6)}
+                        {getInvoiceReference(inv)}
                       </span>
                     </div>
                   </td>
@@ -1218,7 +1177,7 @@ const Invoices = () => {
                   INVOICE DETAILS
                 </span>
                 <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
-                  Invoice #{selectedInvoice.invoiceNumber || selectedInvoice._id}
+                  Order / Invoice Reference {getInvoiceReference(selectedInvoice)}
                 </h3>
               </div>
               <button

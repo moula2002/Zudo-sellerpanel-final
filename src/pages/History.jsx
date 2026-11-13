@@ -7,6 +7,8 @@ import {
 import Layout from '../components/Layout';
 import api from '../utils/api';
 
+const HISTORY_API_ENABLED = import.meta.env.VITE_SELLER_HISTORY_API_ENABLED === 'true';
+
 const categories = [
   { id: 'all', label: 'All Activities' },
   { id: 'orders', label: 'Orders' },
@@ -55,8 +57,365 @@ const getSellerFromStorage = () => {
   }
 };
 
+const getHistoryErrorMessage = (error, fallback = false) => {
+  const status = error.response?.status;
+  if (status === 401) return 'Your session has expired. Please sign in again.';
+  if (status === 403) return 'Your account is not authorized to view business history.';
+  if (fallback && status === 404) return 'One or more existing seller record APIs are not available on this server.';
+  if (status === 404) return 'The History API is not available on this server yet. Deploy the backend history route and retry.';
+  if (status >= 500) return 'The server could not load business history. Please retry shortly.';
+  if (!error.response) {
+    return error.message && error.message !== 'Network Error'
+      ? error.message
+      : 'Unable to reach the API server. Check the backend connection and retry.';
+  }
+  return error.response.data?.message || 'Unable to load business history. Please try again.';
+};
+
+const idString = (value) => value?._id?.toString() || value?.toString() || '';
+
+const validTimestamp = (...values) => {
+  for (const value of values) {
+    if (!value) continue;
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return null;
+};
+
+const getLegacyOrderReference = (order) => {
+  if (order.orderNumber !== undefined && order.orderNumber !== null && String(order.orderNumber).trim()) {
+    return `#${String(order.orderNumber).replace(/^#/, '').padStart(5, '0')}`;
+  }
+  return order.orderRef || (order._id ? `#${String(order._id).slice(-6).toUpperCase()}` : '');
+};
+
+const toLegacyItem = (item) => {
+  const quantity = Number(item.quantity) || 0;
+  const unitPrice = Number(item.price ?? item.unitCustomerPrice) || 0;
+  const savedAmount = Number(item.finalCustomerAmount ?? item.finalCustomerPrice);
+  return {
+    name: item.name || item.product?.name || '',
+    quantity,
+    unit: item.variantSize || item.packagingType || item.unit || item.sellingUnit || '',
+    amount: Number.isFinite(savedAmount) && savedAmount > 0 ? savedAmount : unitPrice * quantity,
+    unitPrice,
+    taxAmount: Number(item.gstAmount || item.totalGst) || 0
+  };
+};
+
+const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, returns }) => {
+  const sellerId = idString(seller);
+  const productIds = new Set((products || []).map(product => idString(product._id)).filter(Boolean));
+  const pickupByOrderId = new Map((pickups || []).map(pickup => [
+    idString(pickup.orderId || pickup._id),
+    pickup
+  ]));
+  const returnByOrderId = new Map((returns || []).map(order => [idString(order._id), order]));
+  const sellerOrders = (orders || []).map(order => {
+    const items = (order.items || []).filter(item =>
+      idString(item.seller?.sellerId || item.sellerId) === sellerId ||
+      (item.productId && productIds.has(idString(item.productId)))
+    );
+    if (!items.length) return null;
+
+    const customer = {
+      name: order.shippingAddress?.name?.trim() || order.userId?.name?.trim() || '',
+      phone: order.shippingAddress?.phone?.trim() || order.userId?.phone?.trim() || '',
+      address: order.shippingAddress?.address || '',
+      city: order.shippingAddress?.city || '',
+      state: order.shippingAddress?.state || '',
+      pincode: order.shippingAddress?.pincode || ''
+    };
+    const itemDetails = items.map(toLegacyItem);
+    const amount = itemDetails.reduce((total, item) => total + item.amount, 0);
+    const orderId = idString(order._id);
+    const referenceId = getLegacyOrderReference(order);
+    const embeddedPickups = (order.sellerPickups || [])
+      .filter(pickup => idString(pickup.sellerId) === sellerId)
+      .map(pickup => ({
+        id: idString(pickup._id),
+        status: pickup.status || '',
+        pickupCode: pickup.pickupCode || '',
+        scheduledDate: pickup.scheduledDate || pickup.pickupDate || order.scheduledDate || order.pickupDate || null,
+        driver: order.driverId && typeof order.driverId === 'object'
+          ? { name: order.driverId.name || '', phone: order.driverId.phone || '' }
+          : null
+      }));
+    const pickupRecord = pickupByOrderId.get(orderId);
+    const orderPickups = embeddedPickups.length
+      ? embeddedPickups
+      : pickupRecord
+        ? [{
+          id: pickupRecord.pickupId || idString(pickupRecord._id),
+          status: pickupRecord.status || pickupRecord.orderStatus || '',
+          pickupCode: pickupRecord.pickupCode || '',
+          scheduledDate: pickupRecord.scheduledDate || pickupRecord.pickupDate || null,
+          driver: pickupRecord.driver
+            ? { name: pickupRecord.driver.name || '', phone: pickupRecord.driver.phone || '' }
+            : null
+        }]
+        : [];
+    const details = {
+      orderId,
+      referenceId,
+      orderNumber: order.orderNumber ?? '',
+      orderRef: order.orderRef || '',
+      customer,
+      items: itemDetails,
+      orderStatus: order.orderStatus || '',
+      paymentStatus: order.paymentStatus || '',
+      paymentMethod: order.paymentMethod || '',
+      paymentAmount: amount,
+      transactionId: order.onlineTransactionId || order.codReference || '',
+      pickup: orderPickups
+    };
+    return { ...order, _historyOrderId: orderId, _historyReference: referenceId, _historyCustomer: customer, _historyItems: itemDetails, _historyAmount: amount, _historyDetails: details };
+  }).filter(Boolean);
+
+  const ordersById = new Map(sellerOrders.map(order => [order._historyOrderId, order]));
+  const rows = [];
+  const add = (activity) => rows.push({ ...activity, fallback: true });
+
+  sellerOrders.forEach(order => {
+    const orderId = order._historyOrderId;
+    const referenceId = order._historyReference;
+    const customer = order._historyCustomer;
+    const items = order._historyItems;
+    const amount = order._historyAmount;
+    const details = order._historyDetails;
+    details.invoiceReferences = [];
+    const occurredAt = validTimestamp(order.createdAt, order.orderDate);
+    const productSummary = items.slice(0, 3).map(item => `${item.name || 'Product'} x${item.quantity}`).join(', ');
+
+    add({
+      id: `fallback:order:${orderId}`,
+      activityType: 'orders',
+      activity: 'New Order Received',
+      occurredAt,
+      referenceId,
+      customer,
+      description: `${items.length} item${items.length === 1 ? '' : 's'}${productSummary ? `: ${productSummary}` : ''}`,
+      amount,
+      status: order.orderStatus || '',
+      source: 'order',
+      recordId: orderId,
+      orderId,
+      details: { ...details, order: details }
+    });
+
+    details.pickup.forEach((pickup, index) => {
+      add({
+        id: `fallback:pickup:${orderId}:${pickup.id || index}`,
+        activityType: 'pickups',
+        activity: pickup.scheduledDate ? 'Pickup Scheduled' : 'Pickup Record Created',
+        occurredAt: validTimestamp(pickup.scheduledDate, occurredAt),
+        referenceId,
+        customer,
+        description: `Pickup record${pickup.status ? `; current status: ${pickup.status}` : ''}`,
+        amount,
+        status: pickup.status,
+        source: 'order',
+        recordId: orderId,
+        orderId,
+        details: { ...details, order: details }
+      });
+    });
+
+    const paymentStatus = String(order.paymentStatus || '').toLowerCase();
+    const collectionStatus = String(order.codCollectionStatus || '').toLowerCase();
+    const onlineStatus = String(order.onlinePaymentStatus || '').toLowerCase();
+    const paymentReceived = ['paid', 'completed', 'verified'].includes(paymentStatus) ||
+      ['collected', 'verified'].includes(collectionStatus) ||
+      onlineStatus === 'verified';
+    const paidAt = validTimestamp(order.paidAt, order.codCollectedAt, order.onlineVerifiedAt);
+    if (paymentReceived && paidAt) {
+      add({
+        id: `fallback:payment:${orderId}:${paidAt}`,
+        activityType: 'payments',
+        activity: 'Payment Received',
+        occurredAt: paidAt,
+        referenceId: details.transactionId || referenceId,
+        customer,
+        description: `${order.paymentMethod || 'Payment'} payment received for order`,
+        amount,
+        status: order.paymentStatus,
+        source: 'order',
+        recordId: orderId,
+        orderId,
+        details: { ...details, transactionId: details.transactionId, order: details }
+      });
+    } else if (paymentStatus === 'pending' && !paymentReceived && occurredAt) {
+      add({
+        id: `fallback:payment-pending:${orderId}`,
+        activityType: 'payments',
+        activity: 'Payment Pending',
+        occurredAt,
+        referenceId,
+        customer,
+        description: `${order.paymentMethod || 'Payment'} payment pending for order`,
+        amount,
+        status: order.paymentStatus,
+        source: 'order',
+        recordId: orderId,
+        orderId,
+        details: { ...details, order: details }
+      });
+    }
+
+    [
+      ['Order Delivered', order.deliveredAt],
+      ['Order Cancelled', order.cancelledAt]
+    ].forEach(([activity, date]) => {
+      const eventDate = validTimestamp(date);
+      if (!eventDate) return;
+      add({
+        id: `fallback:status:${orderId}:${activity}`,
+        activityType: 'statusUpdates',
+        activity,
+        occurredAt: eventDate,
+        referenceId,
+        customer,
+        description: activity === 'Order Cancelled' ? order.cancellationReason || activity : 'Order delivery confirmed',
+        amount,
+        status: order.orderStatus || '',
+        source: 'order',
+        recordId: orderId,
+        orderId,
+        details: { ...details, order: details }
+      });
+    });
+
+    const returnRecord = returnByOrderId.get(orderId);
+    const returnItems = returnRecord?.items?.length
+      ? returnRecord.items
+      : (order.items || []).filter(item => item.returnStatus && item.returnStatus !== 'None');
+    const returnDates = [
+      ['Return Requested', order.returnRequestedAt || returnRecord?.returnRequestedAt],
+      ['Return Approved', order.returnApprovedAt || returnRecord?.returnApprovedAt],
+      ['Return Rejected', order.returnRejectedAt || returnRecord?.returnRejectedAt]
+    ].filter(([, date]) => date);
+    if (!returnDates.length && returnItems.length) {
+      returnDates.push(['Return Status (current)', null]);
+    }
+    returnDates.forEach(([activity, date], index) => {
+      const eventDate = validTimestamp(date);
+      add({
+        id: `fallback:return:${orderId}:${activity}:${index}`,
+        activityType: 'returns',
+        activity,
+        occurredAt: eventDate,
+        referenceId,
+        customer,
+        description: `${returnItems.length || items.length} item${(returnItems.length || items.length) === 1 ? '' : 's'}${order.returnReason ? `; ${order.returnReason}` : ''}${!eventDate ? '; no return-event timestamp was saved' : ''}`,
+        amount: returnItems.reduce((sum, item) => sum + toLegacyItem(item).amount, 0) || amount,
+        status: order.returnStatus || returnItems[0]?.returnStatus || order.orderStatus || '',
+        source: 'order',
+        recordId: orderId,
+        orderId,
+        details: { ...details, returnItems: returnItems.map(toLegacyItem), returnReason: order.returnReason || '', order: details }
+      });
+    });
+  });
+
+  (invoices || []).forEach(invoice => {
+    const invoiceOrderIds = [...new Set([invoice.orderId, ...(invoice.orders || [])].map(idString).filter(Boolean))];
+    const linkedOrders = invoiceOrderIds.map(orderId => ordersById.get(orderId)).filter(Boolean);
+    const order = linkedOrders[0];
+    const invoiceReference = invoice.invoiceNumber || idString(invoice._id);
+    invoiceOrderIds.forEach(orderId => {
+      const linkedOrder = ordersById.get(orderId);
+      if (linkedOrder) linkedOrder._historyDetails.invoiceReferences.push(invoiceReference);
+    });
+    add({
+      id: `fallback:invoice:${idString(invoice._id)}`,
+      activityType: 'invoices',
+      activity: 'Invoice Generated',
+      occurredAt: validTimestamp(invoice.createdAt),
+      referenceId: invoiceReference,
+      customer: order?._historyCustomer || {},
+      description: invoice.orderNumber
+        ? `Invoice for order #${String(invoice.orderNumber).padStart(5, '0')}`
+        : 'Seller invoice generated',
+      amount: invoice.netAmount ?? invoice.totalAmount ?? null,
+      status: invoice.status || '',
+      source: 'invoice',
+      recordId: idString(invoice._id),
+      orderId: invoiceOrderIds[0] || '',
+      details: {
+        invoiceId: idString(invoice._id),
+        invoiceNumber: invoiceReference,
+        orderId: invoiceOrderIds[0] || '',
+        orderNumber: invoice.orderNumber ?? '',
+        startDate: invoice.startDate || null,
+        endDate: invoice.endDate || null,
+        hasInvoiceImage: Boolean(invoice.hasInvoiceImage || invoice.imageCount || invoice.invoiceImage),
+        images: invoice.images || [],
+        status: invoice.status || '',
+        order: order ? {
+          orderId: order._historyOrderId,
+          referenceId: order._historyReference,
+          customer: order._historyCustomer,
+          items: order._historyItems,
+          orderStatus: order.orderStatus || ''
+        } : null,
+        relatedOrders: linkedOrders.map(linkedOrder => ({
+          orderId: linkedOrder._historyOrderId,
+          referenceId: linkedOrder._historyReference,
+          customer: linkedOrder._historyCustomer,
+          items: linkedOrder._historyItems
+        }))
+      }
+    });
+  });
+
+  return rows;
+};
+
+const filterLegacyHistory = (sourceRows, { search, startDate, endDate, status, activityType, page, limit }) => {
+  const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
+  const end = endDate ? new Date(`${endDate}T23:59:59.999`) : null;
+  const needle = search.trim().toLowerCase();
+  const searchedRows = sourceRows.filter(row => {
+    const date = row.occurredAt ? new Date(row.occurredAt) : null;
+    if ((start || end) && (!date || Number.isNaN(date.getTime()) || (start && date < start) || (end && date > end))) return false;
+    if (status && String(row.status || '').toLowerCase() !== status.toLowerCase()) return false;
+    if (!needle) return true;
+    const text = [
+      row.referenceId,
+      row.activity,
+      row.customer?.name,
+      row.customer?.phone,
+      row.description,
+      row.status,
+      row.orderId,
+      row.details?.transactionId,
+      row.details?.invoiceNumber,
+      ...(row.details?.invoiceReferences || []),
+      ...(row.details?.order?.invoiceReferences || [])
+    ].filter(Boolean).join(' ').toLowerCase();
+    return text.includes(needle);
+  });
+  const counts = { all: searchedRows.length, orders: 0, payments: 0, invoices: 0, returns: 0, pickups: 0, statusUpdates: 0 };
+  searchedRows.forEach(row => {
+    if (Object.prototype.hasOwnProperty.call(counts, row.activityType)) counts[row.activityType] += 1;
+  });
+  const categoryRows = searchedRows
+    .filter(row => activityType === 'all' || row.activityType === activityType)
+    .sort((left, right) => (new Date(right.occurredAt || 0).getTime() || 0) - (new Date(left.occurredAt || 0).getTime() || 0));
+  const totalPages = Math.ceil(categoryRows.length / limit);
+  return {
+    rows: categoryRows.slice((page - 1) * limit, page * limit),
+    categoryRows,
+    counts,
+    statuses: [...new Set(searchedRows.map(row => row.status).filter(Boolean))].sort(),
+    pagination: { currentPage: page, totalPages, totalRecords: categoryRows.length, limit }
+  };
+};
+
 const History = () => {
   const [rows, setRows] = useState([]);
+  const [legacyRows, setLegacyRows] = useState(null);
   const [counts, setCounts] = useState({});
   const [statuses, setStatuses] = useState([]);
   const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 0, totalRecords: 0, limit: 20 });
@@ -67,6 +426,7 @@ const History = () => {
   const [activeFilters, setActiveFilters] = useState({ startDate: '', endDate: '', status: '' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [retryKey, setRetryKey] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [selected, setSelected] = useState(null);
   const [detailData, setDetailData] = useState(null);
@@ -83,11 +443,41 @@ const History = () => {
   }, [search]);
 
   useEffect(() => {
+    if (legacyRows !== null) return undefined;
+
     const controller = new AbortController();
+    const loadLegacyHistory = async () => {
+      const [sellerResponse, productsResponse, ordersResponse, invoicesResponse, pickupsResponse, returnsResponse] = await Promise.all([
+        api.get('/sellers/me', { signal: controller.signal }),
+        api.get('/sellers/products', { signal: controller.signal }),
+        api.get('/sellers/orders', { signal: controller.signal }),
+        api.get('/seller-invoices/my-invoices', { signal: controller.signal }),
+        api.get('/sellers/pickups', { signal: controller.signal }),
+        api.get('/sellers/returns', { signal: controller.signal })
+      ]);
+      const getList = (response, label) => {
+        if (!Array.isArray(response.data)) throw new Error(`${label} API returned an invalid response.`);
+        return response.data;
+      };
+      if (!idString(sellerResponse.data)) throw new Error('Seller profile API returned an invalid response.');
+      return buildLegacyHistory({
+        seller: sellerResponse.data,
+        products: getList(productsResponse, 'Products'),
+        orders: getList(ordersResponse, 'Orders'),
+        invoices: getList(invoicesResponse, 'Invoices'),
+        pickups: getList(pickupsResponse, 'Pickups'),
+        returns: getList(returnsResponse, 'Returns')
+      });
+    };
     const loadHistory = async () => {
       setLoading(true);
       setError('');
       try {
+        if (!HISTORY_API_ENABLED) {
+          const legacyData = await loadLegacyHistory();
+          if (!controller.signal.aborted) setLegacyRows(legacyData);
+          return;
+        }
         const { data } = await api.get('/sellers/history', {
           params: {
             search: debouncedSearch,
@@ -106,8 +496,26 @@ const History = () => {
         setPagination(current => ({ ...current, ...(data.pagination || {}) }));
       } catch (requestError) {
         if (!controller.signal.aborted) {
-          setError(requestError.response?.data?.message || 'Unable to load business history. Please try again.');
-          setRows([]);
+          if (HISTORY_API_ENABLED && requestError.response?.status === 404) {
+            try {
+              const legacyData = await loadLegacyHistory();
+              if (!controller.signal.aborted) {
+                setLegacyRows(legacyData);
+              }
+            } catch (fallbackError) {
+              if (!controller.signal.aborted) {
+                setError(getHistoryErrorMessage(fallbackError, true));
+                setRows([]);
+                setCounts({});
+                setPagination(current => ({ ...current, totalRecords: 0, totalPages: 0 }));
+              }
+            }
+          } else {
+            setError(getHistoryErrorMessage(requestError, !HISTORY_API_ENABLED));
+            setRows([]);
+            setCounts({});
+            setPagination(current => ({ ...current, totalRecords: 0, totalPages: 0 }));
+          }
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -115,10 +523,11 @@ const History = () => {
     };
     loadHistory();
     return () => controller.abort();
-  }, [debouncedSearch, activeFilters, category, pagination.currentPage, pagination.limit]);
+  }, [legacyRows, debouncedSearch, activeFilters, category, pagination.currentPage, pagination.limit, retryKey]);
 
   useEffect(() => {
     if (!selected) return undefined;
+    if (selected.fallback) return undefined;
     const controller = new AbortController();
     const loadDetails = async () => {
       setDetailLoading(true);
@@ -139,7 +548,7 @@ const History = () => {
     };
     loadDetails();
     return () => controller.abort();
-  }, [selected]);
+  }, [selected, legacyRows]);
 
   const queryParams = useMemo(() => ({
     search: debouncedSearch,
@@ -149,6 +558,29 @@ const History = () => {
     activityType: category,
     limit: 100
   }), [debouncedSearch, activeFilters, category]);
+
+  const legacyResult = useMemo(() => legacyRows === null ? null : filterLegacyHistory(legacyRows, {
+    search: debouncedSearch,
+    startDate: activeFilters.startDate,
+    endDate: activeFilters.endDate,
+    status: activeFilters.status,
+    activityType: category,
+    page: pagination.currentPage,
+    limit: pagination.limit
+  }), [legacyRows, debouncedSearch, activeFilters, category, pagination.currentPage, pagination.limit]);
+  const visibleRows = legacyResult?.rows || rows;
+  const visibleCounts = legacyResult?.counts || counts;
+  const visibleStatuses = legacyResult?.statuses || statuses;
+  const visiblePagination = legacyResult?.pagination || pagination;
+  const selectedDetailsData = selected?.fallback
+    ? {
+      activity: selected,
+      details: selected.details || {},
+      relatedTransactions: (legacyRows || []).filter(row =>
+        row.orderId && row.orderId === selected.orderId && row.id !== selected.id
+      )
+    }
+    : detailData;
 
   const applyFilters = () => {
     setActiveFilters({ ...filterDraft });
@@ -199,6 +631,17 @@ const History = () => {
   };
 
   const fetchAllFilteredRecords = async () => {
+    if (legacyRows !== null) {
+      return filterLegacyHistory(legacyRows, {
+        search: queryParams.search || '',
+        startDate: queryParams.startDate || '',
+        endDate: queryParams.endDate || '',
+        status: queryParams.status || '',
+        activityType: queryParams.activityType || 'all',
+        page: 1,
+        limit: Math.max(legacyRows.length, 1)
+      }).categoryRows;
+    }
     const first = await api.get('/sellers/history', { params: { ...queryParams, page: 1 } });
     const result = Array.isArray(first.data.data) ? [...first.data.data] : [];
     const totalPages = first.data.pagination?.totalPages || 0;
@@ -289,12 +732,12 @@ const History = () => {
   const changePage = (nextPage) => {
     setPagination(current => ({
       ...current,
-      currentPage: Math.max(1, Math.min(nextPage, current.totalPages || 1))
+      currentPage: Math.max(1, Math.min(nextPage, visiblePagination.totalPages || 1))
     }));
   };
 
-  const selectedActivity = detailData?.activity || selected;
-  const details = detailData?.details || {};
+  const selectedActivity = selectedDetailsData?.activity || selected;
+  const details = selectedDetailsData?.details || {};
   const detailCustomer = details.customer || details.order?.customer;
   return (
     <Layout>
@@ -331,8 +774,11 @@ const History = () => {
         `}</style>
 
         {error && (
-          <div role="alert" style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', color: '#dc2626', padding: '12px 16px', borderRadius: 10, marginBottom: 18 }}>
+          <div role="alert" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', color: '#dc2626', padding: '12px 16px', borderRadius: 10, marginBottom: 18 }}>
             {error}
+            <button type="button" onClick={() => { setLegacyRows(null); setRetryKey(current => current + 1); }} disabled={loading} className="history-action">
+              Retry
+            </button>
           </div>
         )}
 
@@ -358,7 +804,7 @@ const History = () => {
             <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Status
               <select aria-label="Status filter" className="history-control" value={filterDraft.status} onChange={event => setFilterDraft(current => ({ ...current, status: event.target.value }))} style={{ display: 'block', marginTop: 6 }}>
                 <option value="">All statuses</option>
-                {statuses.map(status => <option key={status} value={status}>{status}</option>)}
+                {visibleStatuses.map(status => <option key={status} value={status}>{status}</option>)}
               </select>
             </label>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -377,7 +823,7 @@ const History = () => {
         <section style={{ borderBottom: '1px solid var(--border-color)', display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 14 }}>
           {categories.map(item => (
             <button key={item.id} type="button" onClick={() => { setCategory(item.id); setPagination(current => ({ ...current, currentPage: 1 })); }} className={`history-tab${category === item.id ? ' active' : ''}`}>
-              {item.label} <span style={{ marginLeft: 5, opacity: .7 }}>({counts[item.id] ?? 0})</span>
+              {item.label} <span style={{ marginLeft: 5, opacity: .7 }}>({error ? '—' : visibleCounts[item.id] ?? 0})</span>
             </button>
           ))}
         </section>
@@ -385,7 +831,7 @@ const History = () => {
         <section style={{ background: 'var(--glass-bg)', border: '1px solid var(--border-color)', borderRadius: 16, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px 18px', borderBottom: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontWeight: 750 }}><Activity size={18} color="var(--primary)" /> Activity Records</div>
-            <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{pagination.totalRecords || 0} records</span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{error ? 'Count unavailable' : `${visiblePagination.totalRecords || 0} records`}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -399,9 +845,11 @@ const History = () => {
               <tbody>
                 {loading ? (
                   <tr><td colSpan="8" style={{ padding: 42, textAlign: 'center', color: 'var(--text-dim)' }}><LoaderCircle size={20} className="history-spin" style={{ verticalAlign: 'middle', marginRight: 8 }} /> Loading business history…</td></tr>
-                ) : rows.length === 0 ? (
+                ) : error ? (
+                  <tr><td colSpan="8" role="alert" style={{ padding: 42, textAlign: 'center', color: '#dc2626' }}>{error}</td></tr>
+                ) : visibleRows.length === 0 ? (
                   <tr><td colSpan="8" style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)' }}><Clock3 size={25} style={{ marginBottom: 8 }} /><div>No business history records match these filters.</div></td></tr>
-                ) : rows.map(row => (
+                ) : visibleRows.map(row => (
                   <tr className="history-row" key={row.id} style={{ borderTop: '1px solid var(--border-color)', fontSize: 13 }}>
                     <td style={{ padding: '14px' }}>{formatDate(row.occurredAt)}</td>
                     <td style={{ padding: '14px', fontWeight: 650 }}>{safeText(row.activity)}</td>
@@ -417,10 +865,10 @@ const History = () => {
             </table>
           </div>
           <footer style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '14px 18px', borderTop: '1px solid var(--border-color)', color: 'var(--text-dim)', fontSize: 13 }}>
-            <span>Page {pagination.currentPage || 1} of {pagination.totalPages || 1}</span>
+            <span>Page {visiblePagination.currentPage || 1} of {visiblePagination.totalPages || 1}</span>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" aria-label="Previous page" disabled={loading || pagination.currentPage <= 1} onClick={() => changePage(pagination.currentPage - 1)} className="history-action"><ChevronLeft size={16} /> Previous</button>
-              <button type="button" aria-label="Next page" disabled={loading || pagination.currentPage >= pagination.totalPages} onClick={() => changePage(pagination.currentPage + 1)} className="history-action">Next <ChevronRight size={16} /></button>
+              <button type="button" aria-label="Previous page" disabled={loading || visiblePagination.currentPage <= 1} onClick={() => changePage(visiblePagination.currentPage - 1)} className="history-action"><ChevronLeft size={16} /> Previous</button>
+              <button type="button" aria-label="Next page" disabled={loading || visiblePagination.currentPage >= visiblePagination.totalPages} onClick={() => changePage(visiblePagination.currentPage + 1)} className="history-action">Next <ChevronRight size={16} /></button>
             </div>
           </footer>
         </section>
@@ -435,7 +883,7 @@ const History = () => {
             </header>
             {detailLoading ? <p style={{ color: 'var(--text-dim)' }}>Loading activity details…</p> : null}
             {detailError && <p role="alert" style={{ color: '#dc2626' }}>{detailError}</p>}
-            {!detailLoading && detailData && (
+            {!detailLoading && selectedDetailsData && (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
                   <DetailBlock title="Reference" value={selectedActivity.referenceId} />
@@ -464,10 +912,10 @@ const History = () => {
                 {(details.pickup || details.order?.pickup || []).map((pickup, index) => (
                   <DetailBlock key={`${pickup.id || 'pickup'}-${index}`} title="Pickup" value={[pickup.status, pickup.scheduledDate && formatDate(pickup.scheduledDate)].filter(Boolean).join(' · ')} subvalue={pickup.driver?.name ? `${pickup.driver.name}${pickup.driver.phone ? ` · ${pickup.driver.phone}` : ''}` : ''} />
                 ))}
-                {detailData.relatedTransactions?.length > 0 && (
+                {selectedDetailsData.relatedTransactions?.length > 0 && (
                   <div style={{ marginTop: 20 }}>
                     <h3 style={{ fontSize: 15 }}>Related transaction history</h3>
-                    {detailData.relatedTransactions.map(item => (
+                    {selectedDetailsData.relatedTransactions.map(item => (
                       <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: '1px solid var(--border-color)' }}>
                         <span>{safeText(item.activity)} <small style={{ color: 'var(--text-dim)' }}>{formatDate(item.occurredAt)}</small></span>
                         <strong>{formatAmount(item.amount)}</strong>
