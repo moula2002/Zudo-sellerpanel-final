@@ -408,7 +408,7 @@ const Products = () => {
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>PRODUCT</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CATEGORY</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>SELLER PRICE</th>
-              <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CUSTOMER PRICE</th>
+              <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>FINAL PRICE</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>UNIT TYPE</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>STOCK</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>ACTIONS</th>
