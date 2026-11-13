@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import CompleteProfile from './pages/CompleteProfile';
@@ -15,6 +14,7 @@ import Returns from './pages/Returns';
 import VerificationPending from './pages/VerificationPending';
 import FeedUpload from './pages/FeedUpload';
 import Invoices from './pages/Invoices';
+import History from './pages/History';
 import Categories from './pages/Categories';
 import SubCategories from './pages/SubCategories';
 
@@ -158,6 +158,14 @@ function App() {
               <Invoices />
             </ProtectedRoute>
           } 
+        />
+        <Route
+          path="/history"
+          element={
+            <ProtectedRoute>
+              <History />
+            </ProtectedRoute>
+          }
         />
       </Routes>
     </Router>

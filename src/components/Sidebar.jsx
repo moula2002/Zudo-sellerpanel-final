@@ -1,11 +1,11 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Package, 
-  ShoppingBag, 
-  Truck, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingBag,
+  Truck,
+  Settings,
   LogOut,
   ChevronRight,
   Sun,
@@ -14,12 +14,12 @@ import {
   RotateCcw,
   Rss,
   FileText,
-  Layers
+  Layers,
+  History
 } from 'lucide-react';
 import { useTheme } from '../utils/ThemeContext';
 
 const SidebarItem = ({ to, icon: Icon, label }) => {
-  const { isDarkMode } = useTheme();
   return (
     <NavLink 
       to={to} 
@@ -46,21 +46,18 @@ const SidebarItem = ({ to, icon: Icon, label }) => {
   );
 };
 
-import { getImageUrl } from '../utils/api';
-
 const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { isDarkMode, toggleTheme } = useTheme();
-  const [seller, setSeller] = React.useState(null);
-
-  React.useEffect(() => {
+  const [seller] = React.useState(() => {
     const userStr = localStorage.getItem('zudo_seller_user');
-    if (userStr) {
-      try {
-        setSeller(JSON.parse(userStr));
-      } catch (e) {}
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr);
+    } catch {
+      return null;
     }
-  }, []);
+  });
 
   const handleLogout = () => {
     localStorage.removeItem('zudo_seller_token');
@@ -157,6 +154,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           <SidebarItem to="/products" icon={Package} label="Products" />
           <SidebarItem to="/products/bulk" icon={FileSpreadsheet} label="Bulk Upload" />
           <SidebarItem to="/invoices" icon={FileText} label="Invoices" />
+          <SidebarItem to="/history" icon={History} label="History" />
           <SidebarItem to="/returns" icon={RotateCcw} label="Returns" />
           <SidebarItem to="/pickups" icon={Truck} label="Pickup" />
           <SidebarItem to="/feed-upload" icon={Rss} label="Feed Upload" />
