@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api, { uploadApi, IMAGE_BASE_URL, getImageUrl } from '../utils/api';
-import { findCategoryCommission, calculateCustomerPrice } from '../utils/pricing';
+import { findCategoryCommission, calculateCustomerPrice, calculateB2bPricing } from '../utils/pricing';
 import {
   Package,
   ChevronLeft,
@@ -35,7 +35,7 @@ const EditProduct = () => {
     moq: '1',
     unit: 'BAG',
     packagingType: 'BAG',
-    measurementUnit: 'kg',
+    measurementUnit: 'KG',
     measurementBasis: 'KG',
     unitSize: '1',
     categoryId: '',
@@ -61,24 +61,30 @@ const EditProduct = () => {
   const navigate = useNavigate();
   const [calcQuantity, setCalcQuantity] = useState(1);
 
-  // Main B2B Pricing Custom Unit Management
-  const [mainUnitOptions, setMainUnitOptions] = useState(['BOX', 'BAG']);
-  const [showMainCustomModal, setShowMainCustomModal] = useState(false);
-  const [mainCustomInput, setMainCustomInput] = useState('');
-  const [mainCustomError, setMainCustomError] = useState('');
+  // Shared Custom Packaging & Measurement Unit Management
+  const [packagingOptions, setPackagingOptions] = useState(['BAG', 'BOX']);
+  const [measurementOptions, setMeasurementOptions] = useState(['KG', 'LITRE']);
 
-  // B2B Size Variants Custom Unit Management
-  const [variantCustomModalIndex, setVariantCustomModalIndex] = useState(null);
-  const [variantCustomInput, setVariantCustomInput] = useState('');
-  const [variantCustomError, setVariantCustomError] = useState('');
-  const [globalVariantCustomUnits, setGlobalVariantCustomUnits] = useState([]);
+  // Modals for adding custom units
+  const [showAddPackagingModal, setShowAddPackagingModal] = useState(false);
+  const [addPackagingInput, setAddPackagingInput] = useState('');
+  const [addPackagingError, setAddPackagingError] = useState('');
 
-  // Unit Management Modal (Standalone Manager for all custom units)
+  const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
+  const [addMeasurementInput, setAddMeasurementInput] = useState('');
+  const [addMeasurementError, setAddMeasurementError] = useState('');
+
+  // Target variant index when adding custom option from variant dropdown
+  const [activeVariantAddIndex, setActiveVariantAddIndex] = useState(null);
+
+  // Manage Custom Units Modal
   const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
+  const [manageModalTab, setManageModalTab] = useState('packaging'); // 'packaging' | 'measurement'
   const [unitDeleteLoading, setUnitDeleteLoading] = useState(false);
   const [unitDeleteFeedback, setUnitDeleteFeedback] = useState({ type: '', text: '' });
 
-  const DEFAULT_VARIANT_UNITS = ['pcs', 'g', 'kg', 'ltr', 'ml', 'bag'];
+  const DEFAULT_PACKAGING = ['BAG', 'BOX'];
+  const DEFAULT_MEASUREMENTS = ['KG', 'LITRE'];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -114,21 +120,32 @@ const EditProduct = () => {
           ? String(p.commissionValue)
           : '2';
 
-        const rawLoadedUnit = (p.unit || 'BOX').toString().trim().toUpperCase();
-        // If the legacy product had 'KG' or 'PCS' as unit, normalize it to 'BOX' unless it was BOX or BAG or custom
-        const loadedUnit = (rawLoadedUnit === 'KG' || rawLoadedUnit === 'PCS') ? 'BOX' : rawLoadedUnit;
+        const rawLoadedUnit = (p.unit || p.packagingType || 'BAG').toString().trim().toUpperCase();
+        const loadedUnit = (rawLoadedUnit === 'KG' || rawLoadedUnit === 'LITRE' || rawLoadedUnit === 'LTR') ? 'BAG' : (rawLoadedUnit || 'BAG');
         const loadedCustom = Array.isArray(p.customUnits)
-          ? p.customUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && u !== 'KG' && u !== 'PCS' && u !== 'BOX' && u !== 'BAG')
+          ? p.customUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')
           : [];
-        const globalCustom = Array.isArray(customRes.data?.mainUnits)
-          ? customRes.data.mainUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && u !== 'KG' && u !== 'PCS' && u !== 'BOX' && u !== 'BAG')
+        const globalCustomPkg = Array.isArray(customRes.data?.packagingUnits || customRes.data?.mainUnits)
+          ? (customRes.data.packagingUnits || customRes.data.mainUnits).map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')
           : [];
-        const mergedMainOptions = Array.from(new Set(['BOX', 'BAG', ...loadedCustom, ...globalCustom, loadedUnit]))
-          .filter(u => u !== 'KG' && u !== 'PCS');
-        setMainUnitOptions(mergedMainOptions);
+        const mergedPkgOptions = Array.from(new Set([...DEFAULT_PACKAGING, ...loadedCustom, ...globalCustomPkg, loadedUnit]))
+          .filter(u => u && u !== 'KG' && u !== 'LITRE' && u !== 'LTR');
+        setPackagingOptions(mergedPkgOptions);
+
+        const loadedMeasCustom = Array.isArray(p.customMeasurementUnits)
+          ? p.customMeasurementUnits.map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_MEASUREMENTS.includes(u) && u !== 'BAG' && u !== 'BOX')
+          : [];
+        const globalCustomMeas = Array.isArray(customRes.data?.measurementUnits || customRes.data?.variantUnits)
+          ? (customRes.data.measurementUnits || customRes.data.variantUnits).map(u => String(u || '').trim().toUpperCase()).filter(u => u && !DEFAULT_MEASUREMENTS.includes(u) && u !== 'BAG' && u !== 'BOX')
+          : [];
+        const rawMeasVal = (p.measurementBasis || p.measurementUnit || 'KG').toString().trim().toUpperCase();
+        const loadedMeasVal = (rawMeasVal === 'BAG' || rawMeasVal === 'BOX') ? 'KG' : rawMeasVal;
+        const mergedMeasOptions = Array.from(new Set([...DEFAULT_MEASUREMENTS, ...loadedMeasCustom, ...globalCustomMeas, loadedMeasVal]))
+          .filter(u => u && u !== 'BAG' && u !== 'BOX');
+        setMeasurementOptions(mergedMeasOptions);
 
         const loadedPackaging = (p.packagingType || loadedUnit || 'BAG').toUpperCase();
-        const loadedMeas = (p.measurementBasis || p.measurementUnit || 'KG').toUpperCase();
+        const loadedMeas = loadedMeasVal;
         const loadedPriceBasis = p.priceBasis || (p.isPackagePrice ? 'per_package' : 'per_unit');
 
         let resolvedUnitSize = Number(p.unitSize);
@@ -164,7 +181,7 @@ const EditProduct = () => {
           moq: (p.moq !== undefined && p.moq !== null) ? String(p.moq) : ((p.maxOrderQuantity !== undefined && p.maxOrderQuantity !== null) ? String(p.maxOrderQuantity) : '1'),
           unit: loadedPackaging,
           packagingType: loadedPackaging,
-          measurementUnit: loadedMeas.toLowerCase(),
+          measurementUnit: loadedMeas,
           measurementBasis: loadedMeas,
           unitSize: String(resolvedUnitSize),
           categoryId: p.categoryId?._id || p.categoryId || '',
@@ -180,20 +197,15 @@ const EditProduct = () => {
         });
 
         const parsePacketSize = (sizeStr) => {
-          if (!sizeStr) return { val: '', unit: 'kg' };
+          if (!sizeStr) return { val: '', unit: 'KG' };
           const valMatch = sizeStr.match(/^[\d\.]+/);
           const val = valMatch ? valMatch[0] : '';
-          const unit = sizeStr.slice(val.length).trim();
+          const unit = sizeStr.slice(val.length).trim().toUpperCase();
           return {
             val,
-            unit: unit || 'kg'
+            unit: unit || 'KG'
           };
         };
-
-        const globalVariantCustom = Array.isArray(customRes.data?.variantUnits)
-          ? customRes.data.variantUnits.map(u => String(u || '').trim().toUpperCase()).filter(Boolean)
-          : [];
-        setGlobalVariantCustomUnits(globalVariantCustom);
 
         const parsedB2b = (p.b2b || []).map(v => {
           const parsed = parsePacketSize(v.packetSize);
@@ -202,15 +214,19 @@ const EditProduct = () => {
           const vSeller = vPriceBasis === 'per_unit' && v.sellerPricePerBaseUnit !== undefined && v.sellerPricePerBaseUnit !== null
             ? String(v.sellerPricePerBaseUnit)
             : (v.sellerPrice !== undefined && v.sellerPrice !== null ? String(v.sellerPrice) : (v.price ? String(v.price) : ''));
-          const variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'kg').toLowerCase();
-          const variantPkg = (v.packagingType || loadedPackaging || 'BAG').toUpperCase();
-          const variantOptions = Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustom, variantMeas]));
+          let variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'KG').toUpperCase();
+          if (variantMeas === 'BAG' || variantMeas === 'BOX') {
+            variantMeas = 'KG';
+          }
+          let variantPkg = (v.packagingType || loadedPackaging || 'BAG').toUpperCase();
+          if (variantPkg === 'KG' || variantPkg === 'LITRE' || variantPkg === 'LTR') {
+            variantPkg = 'BAG';
+          }
           return {
             packetSizeVal: vUnitSize,
             packetSizeUnit: variantMeas,
             packagingType: variantPkg,
             priceBasis: vPriceBasis,
-            customUnitOptions: variantOptions,
             sellerPrice: vSeller,
             price: v.price ? String(v.price) : '',
             gstPercent: v.gstPercent !== undefined && v.gstPercent !== null ? String(v.gstPercent) : (p.gstPercent ? String(p.gstPercent) : '0'),
@@ -257,10 +273,9 @@ const EditProduct = () => {
     ...b2bVariants, 
     { 
       packetSizeVal: '', 
-      packetSizeUnit: formData.measurementUnit || 'kg',
+      packetSizeUnit: formData.measurementUnit || 'KG',
       packagingType: formData.unit || 'BAG',
       priceBasis: 'per_unit',
-      customUnitOptions: Array.from(new Set([...DEFAULT_VARIANT_UNITS, ...globalVariantCustomUnits])),
       sellerPrice: '', 
       price: '', 
       gstPercent: formData.gstPercent || 0,
@@ -269,76 +284,113 @@ const EditProduct = () => {
   ]);
   const handleRemoveB2b = (index) => setB2bVariants(b2bVariants.filter((_, i) => i !== index));
   const handleB2bChange = (index, field, value) => {
+    if (field === 'packagingType' && value === '__ADD_CUSTOM__') {
+      setActiveVariantAddIndex(index);
+      setAddPackagingInput('');
+      setAddPackagingError('');
+      setShowAddPackagingModal(true);
+      return;
+    }
+    if (field === 'packagingType' && value === '__MANAGE_CUSTOM__') {
+      setManageModalTab('packaging');
+      setShowManageUnitsModal(true);
+      return;
+    }
+    if (field === 'packetSizeUnit' && value === '__ADD_CUSTOM__') {
+      setActiveVariantAddIndex(index);
+      setAddMeasurementInput('');
+      setAddMeasurementError('');
+      setShowAddMeasurementModal(true);
+      return;
+    }
+    if (field === 'packetSizeUnit' && value === '__MANAGE_CUSTOM__') {
+      setManageModalTab('measurement');
+      setShowManageUnitsModal(true);
+      return;
+    }
     const newArr = [...b2bVariants];
     newArr[index][field] = value;
     setB2bVariants(newArr);
   };
 
-  // Add custom unit for main B2B Pricing dropdown
-  const handleAddMainCustomUnit = async () => {
-    const clean = (mainCustomInput || '').trim().toUpperCase();
+  // Add Custom Packaging Type (Shared across Main B2B & Variants)
+  const handleAddCustomPackaging = async () => {
+    const clean = (addPackagingInput || '').trim().toUpperCase();
     if (!clean) {
-      setMainCustomError('Unit name cannot be empty');
+      setAddPackagingError('Packaging name cannot be empty');
       return;
     }
-    if (mainUnitOptions.includes(clean)) {
-      setMainCustomError(`Unit "${clean}" already exists`);
-      return;
-    }
-    try {
-      await api.post('/products/custom-units', { unit: clean, type: 'main' });
-    } catch (e) {
-      console.warn('Backend custom unit sync (main):', e.response?.data?.message || e.message);
-    }
-    setMainUnitOptions(prev => [...prev, clean]);
-    setFormData(prev => ({ ...prev, unit: clean }));
-    setMainCustomInput('');
-    setMainCustomError('');
-    setShowMainCustomModal(false);
-  };
-
-  // Add custom unit for a specific B2B variant row
-  const handleAddVariantCustomUnit = async () => {
-    if (variantCustomModalIndex === null) return;
-    const clean = (variantCustomInput || '').trim().toUpperCase();
-    if (!clean) {
-      setVariantCustomError('Unit name cannot be empty');
-      return;
-    }
-    const targetVariant = b2bVariants[variantCustomModalIndex];
-    const currentOptions = targetVariant?.customUnitOptions || DEFAULT_VARIANT_UNITS;
-    if (currentOptions.includes(clean)) {
-      setVariantCustomError(`Unit "${clean}" already exists in this variant`);
+    if (packagingOptions.includes(clean)) {
+      setAddPackagingError(`Packaging type "${clean}" already exists`);
       return;
     }
 
     try {
-      await api.post('/products/custom-units', { unit: clean, type: 'variant' });
+      await api.post('/products/custom-units', { unit: clean, type: 'packaging' });
     } catch (e) {
-      console.warn('Backend custom unit sync (variant):', e.response?.data?.message || e.message);
+      console.warn('Backend custom unit sync (packaging):', e.response?.data?.message || e.message);
     }
 
-    const newVariants = [...b2bVariants];
-    newVariants[variantCustomModalIndex] = {
-      ...targetVariant,
-      customUnitOptions: [...currentOptions, clean],
-      packetSizeUnit: clean
-    };
-    setB2bVariants(newVariants);
-    setGlobalVariantCustomUnits(prev => Array.from(new Set([...prev, clean])));
-    setVariantCustomInput('');
-    setVariantCustomError('');
-    setVariantCustomModalIndex(null);
+    setPackagingOptions(prev => Array.from(new Set([...prev, clean])));
+    
+    // If triggered from variant row, set it for that variant; otherwise for main form
+    if (activeVariantAddIndex !== null && b2bVariants[activeVariantAddIndex]) {
+      const newVariants = [...b2bVariants];
+      newVariants[activeVariantAddIndex].packagingType = clean;
+      setB2bVariants(newVariants);
+      setActiveVariantAddIndex(null);
+    } else {
+      setFormData(prev => ({ ...prev, unit: clean, packagingType: clean }));
+    }
+
+    setAddPackagingInput('');
+    setAddPackagingError('');
+    setShowAddPackagingModal(false);
   };
 
-  // Delete a custom unit (Main B2B unit)
-  const handleDeleteMainCustomUnit = async (unitToDelete) => {
+  // Add Custom Measurement Unit (Shared across Main B2B & Variants)
+  const handleAddCustomMeasurement = async () => {
+    const clean = (addMeasurementInput || '').trim().toUpperCase();
+    if (!clean) {
+      setAddMeasurementError('Measurement unit cannot be empty');
+      return;
+    }
+    if (measurementOptions.some(m => m.toUpperCase() === clean)) {
+      setAddMeasurementError(`Measurement unit "${clean}" already exists`);
+      return;
+    }
+
+    try {
+      await api.post('/products/custom-units', { unit: clean, type: 'measurement' });
+    } catch (e) {
+      console.warn('Backend custom unit sync (measurement):', e.response?.data?.message || e.message);
+    }
+
+    setMeasurementOptions(prev => Array.from(new Set([...prev, clean])));
+
+    // If triggered from variant row, set it for that variant; otherwise for main form
+    if (activeVariantAddIndex !== null && b2bVariants[activeVariantAddIndex]) {
+      const newVariants = [...b2bVariants];
+      newVariants[activeVariantAddIndex].packetSizeUnit = clean;
+      setB2bVariants(newVariants);
+      setActiveVariantAddIndex(null);
+    } else {
+      setFormData(prev => ({ ...prev, measurementUnit: clean, measurementBasis: clean }));
+    }
+
+    setAddMeasurementInput('');
+    setAddMeasurementError('');
+    setShowAddMeasurementModal(false);
+  };
+
+  // Delete Custom Packaging Type
+  const handleDeletePackaging = async (unitToDelete) => {
     const clean = String(unitToDelete || '').trim().toUpperCase();
-    if (clean === 'BOX' || clean === 'BAG') {
-      alert('Permanent default units (BOX, BAG) cannot be deleted.');
+    if (DEFAULT_PACKAGING.includes(clean)) {
+      alert(`Permanent default packaging (${clean}) cannot be deleted.`);
       return;
     }
-    const confirmed = window.confirm(`Are you sure you want to delete custom unit "${clean}"?`);
+    const confirmed = window.confirm(`Are you sure you want to delete custom packaging type "${clean}"?`);
     if (!confirmed) return;
 
     setUnitDeleteLoading(true);
@@ -346,25 +398,30 @@ const EditProduct = () => {
 
     try {
       const res = await api.delete('/products/custom-units', {
-        data: { unit: clean, type: 'main' }
+        data: { unit: clean, type: 'packaging' }
       });
 
-      // Update state: remove from mainUnitOptions
-      setMainUnitOptions(prev => prev.filter(u => u !== clean));
+      setPackagingOptions(prev => prev.filter(u => u !== clean));
 
-      // If currently selected unit was the deleted one, reset to default BOX
-      if (formData.unit === clean) {
-        setFormData(prev => ({ ...prev, unit: 'BOX' }));
+      // Reset main form selection if deleted
+      if (formData.unit === clean || formData.packagingType === clean) {
+        setFormData(prev => ({ ...prev, unit: 'BAG', packagingType: 'BAG' }));
       }
+
+      // Reset any variant rows using this packaging
+      setB2bVariants(prev => prev.map(v => ({
+        ...v,
+        packagingType: v.packagingType === clean ? 'BAG' : v.packagingType
+      })));
 
       setUnitDeleteFeedback({
         type: 'success',
-        text: res.data?.message || `Unit "${clean}" deleted successfully.`
+        text: res.data?.message || `Packaging "${clean}" deleted successfully.`
       });
       setTimeout(() => setUnitDeleteFeedback({ type: '', text: '' }), 4000);
     } catch (err) {
-      console.error('Failed to delete custom unit:', err);
-      const msg = err.response?.data?.message || `Failed to delete custom unit "${clean}".`;
+      console.error('Failed to delete packaging unit:', err);
+      const msg = err.response?.data?.message || `Failed to delete packaging "${clean}".`;
       setUnitDeleteFeedback({ type: 'error', text: msg });
       alert(msg);
     } finally {
@@ -372,15 +429,14 @@ const EditProduct = () => {
     }
   };
 
-  // Delete a custom unit from a B2B variant
-  const handleDeleteVariantCustomUnit = async (variantIdx, unitToDelete) => {
-    const clean = String(unitToDelete || '').trim();
-    const DEFAULT_SET = new Set(['pcs', 'g', 'kg', 'ltr', 'ml', 'bag', 'PCS', 'G', 'KG', 'LTR', 'ML', 'BAG']);
-    if (DEFAULT_SET.has(clean) || DEFAULT_SET.has(clean.toLowerCase())) {
-      alert(`Standard default variant units (${clean}) cannot be deleted.`);
+  // Delete Custom Measurement Unit
+  const handleDeleteMeasurement = async (unitToDelete) => {
+    const clean = String(unitToDelete || '').trim().toUpperCase();
+    if (DEFAULT_MEASUREMENTS.includes(clean)) {
+      alert(`Permanent default measurement (${clean}) cannot be deleted.`);
       return;
     }
-    const confirmed = window.confirm(`Are you sure you want to delete custom variant unit "${clean}"?`);
+    const confirmed = window.confirm(`Are you sure you want to delete custom measurement unit "${clean}"?`);
     if (!confirmed) return;
 
     setUnitDeleteLoading(true);
@@ -388,29 +444,30 @@ const EditProduct = () => {
 
     try {
       const res = await api.delete('/products/custom-units', {
-        data: { unit: clean, type: 'variant' }
+        data: { unit: clean, type: 'measurement' }
       });
 
-      // Update the specific variant row's options and any other rows carrying it
-      setB2bVariants(prev => prev.map(v => {
-        const updatedOptions = (v.customUnitOptions || DEFAULT_VARIANT_UNITS).filter(u => u !== clean);
-        return {
-          ...v,
-          customUnitOptions: updatedOptions,
-          packetSizeUnit: v.packetSizeUnit === clean ? 'pcs' : v.packetSizeUnit
-        };
-      }));
+      setMeasurementOptions(prev => prev.filter(u => u.toUpperCase() !== clean));
 
-      setGlobalVariantCustomUnits(prev => prev.filter(u => u !== clean));
+      // Reset main form selection if deleted
+      if ((formData.measurementUnit || '').toUpperCase() === clean) {
+        setFormData(prev => ({ ...prev, measurementUnit: 'KG', measurementBasis: 'KG' }));
+      }
+
+      // Reset any variant rows using this measurement
+      setB2bVariants(prev => prev.map(v => ({
+        ...v,
+        packetSizeUnit: (v.packetSizeUnit || '').toUpperCase() === clean ? 'KG' : v.packetSizeUnit
+      })));
 
       setUnitDeleteFeedback({
         type: 'success',
-        text: res.data?.message || `Variant unit "${clean}" deleted successfully.`
+        text: res.data?.message || `Measurement "${clean}" deleted successfully.`
       });
       setTimeout(() => setUnitDeleteFeedback({ type: '', text: '' }), 4000);
     } catch (err) {
-      console.error('Failed to delete variant custom unit:', err);
-      const msg = err.response?.data?.message || `Failed to delete custom unit "${clean}".`;
+      console.error('Failed to delete measurement unit:', err);
+      const msg = err.response?.data?.message || `Failed to delete measurement unit "${clean}".`;
       setUnitDeleteFeedback({ type: 'error', text: msg });
       alert(msg);
     } finally {
@@ -427,10 +484,22 @@ const EditProduct = () => {
 
   const selectedCategory = categories.find(c => String(c._id) === String(formData.categoryId));
   const gstPercentNum = Number(formData.gstPercent) || 0;
+  const currentUnitSize = parseFloat(formData.unitSize) > 0 ? parseFloat(formData.unitSize) : 1;
 
-  const b2bSellerBase = sellerB2bVal * calcQuantity;
-  const b2bGstAmount = (b2bSellerBase * gstPercentNum) / 100;
-  const b2bPriceTotal = b2bSellerBase + b2bGstAmount;
+  // Shared package pricing calculation:
+  // sellerPricePerPackage = basePrice × unitSize
+  // gstAmount = sellerPricePerPackage × (gstRate / 100)
+  // customerPricePerPackage = sellerPricePerPackage + gstAmount
+  const pricingBreakdown = calculateB2bPricing({
+    basePrice: sellerB2bVal,
+    unitSize: currentUnitSize,
+    gstRate: gstPercentNum,
+    quantity: calcQuantity
+  });
+
+  const b2bSellerBase = pricingBreakdown.totalSellerPrice;
+  const b2bGstAmount = pricingBreakdown.totalGstAmount;
+  const b2bPriceTotal = pricingBreakdown.totalCustomerPrice;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -486,9 +555,15 @@ const EditProduct = () => {
         : null;
 
       const customUnitsToSave = Array.from(new Set(
-        mainUnitOptions
-          .filter(u => u !== 'BOX' && u !== 'BAG')
-          .concat(formData.unit && formData.unit !== 'BOX' && formData.unit !== 'BAG' ? [formData.unit] : [])
+        packagingOptions
+          .filter(u => !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')
+          .concat(formData.unit && !DEFAULT_PACKAGING.includes(formData.unit) && formData.unit !== 'KG' && formData.unit !== 'LITRE' ? [formData.unit] : [])
+      ));
+
+      const customMeasToSave = Array.from(new Set(
+        measurementOptions
+          .filter(u => !DEFAULT_MEASUREMENTS.includes(u.toUpperCase()) && u.toUpperCase() !== 'BAG' && u.toUpperCase() !== 'BOX')
+          .map(u => u.toUpperCase())
       ));
 
       await api.put(`/products/${id}`, {
@@ -501,10 +576,15 @@ const EditProduct = () => {
         isPackagePrice: false,
         unitSize: parseFloat(formData.unitSize) || 1,
         customUnits: customUnitsToSave,
+        customPackagingUnits: customUnitsToSave,
+        customMeasurementUnits: customMeasToSave,
         subCategoryId: cleanSubCategoryId,
         sellerB2bPrice: sellerB2bVal,
-        b2bPrice: sellerB2bVal,
         sellerPrice: sellerB2bVal,
+        sellerPricePerBaseUnit: sellerB2bVal,
+        sellerPricePerProductUnit: sellerB2bVal,
+        sellerUnitPrice: sellerB2bVal,
+        b2bPrice: sellerB2bVal,
         price: sellerB2bVal,
         commissionType: 'flat',
         commissionValue: 0,
@@ -656,10 +736,13 @@ const EditProduct = () => {
                   </div>
                   <h2 style={{ fontSize: '18px', fontWeight: 700 }}>B2B Pricing</h2>
                 </div>
-                {(mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length > 0 || globalVariantCustomUnits.length > 0) && (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    onClick={() => setShowManageUnitsModal(true)}
+                    onClick={() => {
+                      setManageModalTab('packaging');
+                      setShowManageUnitsModal(true);
+                    }}
                     style={{
                       background: 'rgba(99, 102, 241, 0.1)',
                       border: '1px solid rgba(99, 102, 241, 0.25)',
@@ -674,9 +757,31 @@ const EditProduct = () => {
                       gap: '6px'
                     }}
                   >
-                    <Trash2 size={13} /> Manage Custom Units
+                    <Trash2 size={13} /> Manage Custom Packaging
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManageModalTab('measurement');
+                      setShowManageUnitsModal(true);
+                    }}
+                    style={{
+                      background: 'rgba(34, 197, 94, 0.1)',
+                      border: '1px solid rgba(34, 197, 94, 0.25)',
+                      color: '#22c55e',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Trash2 size={13} /> Manage Custom Measurements
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
@@ -723,53 +828,66 @@ const EditProduct = () => {
                     value={formData.unit}
                     onChange={(e) => {
                       if (e.target.value === '__ADD_CUSTOM__') {
-                        setMainCustomInput('');
-                        setMainCustomError('');
-                        setShowMainCustomModal(true);
+                        setActiveVariantAddIndex(null);
+                        setAddPackagingInput('');
+                        setAddPackagingError('');
+                        setShowAddPackagingModal(true);
+                      } else if (e.target.value === '__MANAGE_CUSTOM__') {
+                        setManageModalTab('packaging');
+                        setShowManageUnitsModal(true);
                       } else {
                         const val = e.target.value;
-                        const autoMeas = ['kg', 'ton', 'ltr', 'g', 'ml', 'pcs'].includes(val.toLowerCase()) ? val.toLowerCase() : (formData.measurementUnit || 'kg');
-                        setFormData(prev => ({ ...prev, unit: val, packagingType: val, measurementUnit: autoMeas, measurementBasis: autoMeas.toUpperCase() }));
+                        setFormData(prev => ({ ...prev, unit: val, packagingType: val }));
                       }
                     }}
                     required
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
-                    <option value="BAG">BAG</option>
-                    <option value="BOX">BOX</option>
-                    <option value="TIN">TIN</option>
-                    <option value="BOTTLE">BOTTLE</option>
-                    <option value="PACK">PACK</option>
-                    <option value="PIECE">PIECE</option>
-                    {mainUnitOptions.filter(u => !['BOX', 'BAG', 'TIN', 'BOTTLE', 'PACK', 'PIECE'].includes(u)).map(u => (
+                    {packagingOptions.map(u => (
                       <option key={u} value={u}>{u}</option>
                     ))}
                     <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
                       + Custom Packaging
+                    </option>
+                    <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                      ⚙ Manage / Delete Packaging...
                     </option>
                   </select>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG for Bag of Rice)</span>
+                    Measurement Basis * <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>(e.g. KG or LITRE)</span>
                   </label>
                   <select
                     className="input-field"
-                    value={formData.measurementUnit || 'kg'}
+                    value={formData.measurementUnit || 'KG'}
                     onChange={e => {
-                      const val = e.target.value;
-                      setFormData(prev => ({ ...prev, measurementUnit: val, measurementBasis: val.toUpperCase() }));
+                      if (e.target.value === '__ADD_CUSTOM__') {
+                        setActiveVariantAddIndex(null);
+                        setAddMeasurementInput('');
+                        setAddMeasurementError('');
+                        setShowAddMeasurementModal(true);
+                      } else if (e.target.value === '__MANAGE_CUSTOM__') {
+                        setManageModalTab('measurement');
+                        setShowManageUnitsModal(true);
+                      } else {
+                        const val = e.target.value;
+                        setFormData(prev => ({ ...prev, measurementUnit: val, measurementBasis: val.toUpperCase() }));
+                      }
                     }}
                     required
                     style={{ height: '50px', cursor: 'pointer' }}
                   >
-                    <option value="kg">KG</option>
-                    <option value="g">Gram (g)</option>
-                    <option value="ton">Ton</option>
-                    <option value="ltr">Litre</option>
-                    <option value="ml">Millilitre (ml)</option>
-                    <option value="pcs">Piece</option>
+                    {measurementOptions.map(m => (
+                      <option key={m} value={m}>{m.toUpperCase()}</option>
+                    ))}
+                    <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: '#22c55e' }}>
+                      + Custom Measurement
+                    </option>
+                    <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                      ⚙ Manage / Delete Measurements...
+                    </option>
                   </select>
                 </div>
 
@@ -811,7 +929,7 @@ const EditProduct = () => {
                   <div>
                     <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Payout / Package</span>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: '#22c55e' }}>
-                      ₹{(Number(formData.sellerB2bPrice || 0) * Number(formData.unitSize || 1)).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()} (₹{Number(formData.sellerB2bPrice || 0)} × {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()})
+                      ₹{Number(formData.sellerB2bPrice || 0).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()}
                     </div>
                   </div>
                 </div>
@@ -853,70 +971,6 @@ const EditProduct = () => {
                 </div>
               </div>
 
-              {/* Dynamic Pricing Breakdown Card */}
-              {sellerB2bVal > 0 && (
-                <div style={{
-                  marginTop: '25px',
-                  padding: '24px',
-                  borderRadius: '20px',
-                  background: 'rgba(99, 102, 241, 0.08)',
-                  border: '1px solid rgba(99, 102, 241, 0.25)',
-                  fontSize: '13px',
-                  lineHeight: '1.6'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px' }}>
-                      <Info size={18} /> Live Pricing Breakdown
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                        Simulate Quantity:
-                      </span>
-                      <select
-                        value={calcQuantity}
-                        onChange={e => setCalcQuantity(Number(e.target.value))}
-                        style={{
-                          background: 'var(--card-bg)',
-                          border: '1px solid var(--border-color)',
-                          color: 'var(--text-main)',
-                          borderRadius: '8px',
-                          padding: '6px 12px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <option value="1">1 {formData.unit || 'unit'}</option>
-                        <option value="2">2 {formData.unit || 'units'}</option>
-                        <option value="3">3 {formData.unit || 'units'}</option>
-                        <option value="5">5 {formData.unit || 'units'}</option>
-                        <option value="10">10 {formData.unit || 'units'}</option>
-                        <option value="20">20 {formData.unit || 'units'}</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '16px', background: 'var(--card-bg)', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Seller Unit Price:</span>
-                      <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{sellerB2bVal.toFixed(2)} / {formData.unit || 'unit'}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Total Seller Price ({calcQuantity} {formData.unit}):</span>
-                      <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>₹{b2bSellerBase.toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-                      <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>Applicable GST ({gstPercentNum}%):</span>
-                      <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>+₹{b2bGstAmount.toFixed(2)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid var(--border-color)', fontSize: '15px' }}>
-                      <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>Total Price (incl. GST):</span>
-                      <span style={{ color: '#16a34a', fontWeight: 800, fontSize: '17px' }}>₹{b2bPriceTotal.toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* B2B Size Variants Section */}
               <div style={{ marginTop: '30px', borderTop: '1px solid var(--border-color)', paddingTop: '30px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -938,7 +992,7 @@ const EditProduct = () => {
 
                       return (
                         <div key={index} style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '15px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                             <div style={{ flex: 1.2, minWidth: '100px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Packaging Type *</label>
                               <select 
@@ -948,12 +1002,15 @@ const EditProduct = () => {
                                 required
                                 style={{ height: '48px', cursor: 'pointer' }}
                               >
-                                <option value="BAG">BAG</option>
-                                <option value="BOX">BOX</option>
-                                <option value="TIN">TIN</option>
-                                <option value="BOTTLE">BOTTLE</option>
-                                <option value="PACK">PACK</option>
-                                <option value="PIECE">PIECE</option>
+                                {packagingOptions.map(u => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                                <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: 'var(--primary, #6366f1)' }}>
+                                  + Custom Packaging
+                                </option>
+                                <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                                  ⚙ Manage / Delete Packaging...
+                                </option>
                               </select>
                             </div>
 
@@ -981,12 +1038,15 @@ const EditProduct = () => {
                                 required
                                 style={{ height: '48px', cursor: 'pointer' }}
                               >
-                                <option value="kg">KG</option>
-                                <option value="g">Gram (g)</option>
-                                <option value="ton">Ton</option>
-                                <option value="ltr">Litre</option>
-                                <option value="ml">Millilitre</option>
-                                <option value="pcs">Piece</option>
+                                {measurementOptions.map(m => (
+                                  <option key={m} value={m}>{m.toUpperCase()}</option>
+                                ))}
+                                <option value="__ADD_CUSTOM__" style={{ fontWeight: 700, color: '#22c55e' }}>
+                                  + Custom Measurement
+                                </option>
+                                <option value="__MANAGE_CUSTOM__" style={{ fontWeight: 600, color: '#ef4444' }}>
+                                  ⚙ Manage / Delete Measurements...
+                                </option>
                               </select>
                             </div>
 
@@ -1022,14 +1082,17 @@ const EditProduct = () => {
                               />
                             </div>
 
-                            <button 
-                              type="button" 
-                              onClick={() => handleRemoveB2b(index)} 
-                              style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              title="Remove Variant"
-                            >
-                              <Trash2 size={20} />
-                            </button>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={{ display: 'block', fontSize: '11px', opacity: 0, marginBottom: '4px', pointerEvents: 'none', userSelect: 'none' }}>Action</label>
+                              <button 
+                                type="button" 
+                                onClick={() => handleRemoveB2b(index)} 
+                                style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                title="Remove Variant"
+                              >
+                                <Trash2 size={20} />
+                              </button>
+                            </div>
                           </div>
 
                           {/* Variant Specification & Pricing Summary */}
@@ -1038,7 +1101,7 @@ const EditProduct = () => {
                               1 {vPkgType} = {vUnitSize} {vMeas}
                             </span>
                             <span style={{ color: '#22c55e', fontWeight: 700 }}>
-                              Payout / {vPkgType}: ₹{vPkgPrice.toFixed(2)} {vGstRate > 0 ? `(₹${vTotalWithGst.toFixed(2)} incl. ${vGstRate}% GST)` : ''}
+                              Payout / {vPkgType}: ₹{vSeller.toFixed(2)}
                             </span>
                           </div>
                         </div>
@@ -1207,8 +1270,8 @@ const EditProduct = () => {
           </button>
         </div>
 
-        {/* Modal: Add Custom Unit for Main Unit Type */}
-        {showMainCustomModal && (
+        {/* Modal: Add Custom Packaging Type */}
+        {showAddPackagingModal && (
           <div style={{
             position: 'fixed',
             inset: 0,
@@ -1229,54 +1292,42 @@ const EditProduct = () => {
               background: 'var(--bg-dark, #0f172a)'
             }}>
               <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
-                Add Custom Unit Type
+                Add Custom Packaging Type
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '16px' }}>
-                Enter a custom unit name (e.g. CARTON, CRATE, TRAY). It will be saved with this product.
+                Enter custom packaging type (e.g. CARTON, DRUM, TRAY, CANISTER). Available across all packaging fields.
               </p>
               <input
                 type="text"
                 className="input-field"
                 placeholder="e.g. CARTON"
-                value={mainCustomInput}
+                value={addPackagingInput}
                 onChange={(e) => {
-                  setMainCustomInput(e.target.value.toUpperCase());
-                  setMainCustomError('');
+                  setAddPackagingInput(e.target.value.toUpperCase());
+                  setAddPackagingError('');
                 }}
                 autoFocus
                 style={{ height: '48px', textTransform: 'uppercase', marginBottom: '8px' }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleAddMainCustomUnit();
+                    handleAddCustomPackaging();
                   }
                 }}
               />
-              {mainCustomError && (
+              {addPackagingError && (
                 <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '12px', fontWeight: 500 }}>
-                  {mainCustomError}
-                </div>
-              )}
-
-              {unitDeleteFeedback.text && (
-                <div style={{
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  marginBottom: '12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  background: unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                  color: unitDeleteFeedback.type === 'error' ? '#ef4444' : '#22c55e',
-                  border: `1px solid ${unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`
-                }}>
-                  {unitDeleteFeedback.text}
+                  {addPackagingError}
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
                   type="button"
-                  onClick={() => setShowMainCustomModal(false)}
+                  onClick={() => {
+                    setShowAddPackagingModal(false);
+                    setActiveVariantAddIndex(null);
+                  }}
                   style={{
                     flex: 1,
                     padding: '10px',
@@ -1292,7 +1343,7 @@ const EditProduct = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleAddMainCustomUnit}
+                  onClick={handleAddCustomPackaging}
                   style={{
                     flex: 1,
                     padding: '10px',
@@ -1304,58 +1355,15 @@ const EditProduct = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  Add Unit
+                  Add Packaging
                 </button>
               </div>
-
-              {/* Manage Existing Custom Main Units */}
-              {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length > 0 && (
-                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Custom Units ({mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length})
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
-                    {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').map(u => (
-                      <div key={u} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        background: 'rgba(255,255,255,0.03)',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border-color)'
-                      }}>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{u}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMainCustomUnit(u)}
-                          disabled={unitDeleteLoading}
-                          title={`Delete custom unit "${u}"`}
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            border: 'none',
-                            color: '#ef4444',
-                            padding: '6px',
-                            borderRadius: '6px',
-                            cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {/* Modal: Add Custom Unit for B2B Variant */}
-        {variantCustomModalIndex !== null && (
+        {/* Modal: Add Custom Measurement Unit */}
+        {showAddMeasurementModal && (
           <div style={{
             position: 'fixed',
             inset: 0,
@@ -1376,54 +1384,42 @@ const EditProduct = () => {
               background: 'var(--bg-dark, #0f172a)'
             }}>
               <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
-                Add Custom Variant Unit
+                Add Custom Measurement Unit
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '16px' }}>
-                Enter custom unit for Variant #{variantCustomModalIndex + 1} (e.g. PACKET, CAN, STRIP).
+                Enter custom measurement unit (e.g. MTR, SQFT, DOZEN, ROLL, BUNDLE). Available across all measurement fields.
               </p>
               <input
                 type="text"
                 className="input-field"
-                placeholder="e.g. PACKET"
-                value={variantCustomInput}
+                placeholder="e.g. MTR"
+                value={addMeasurementInput}
                 onChange={(e) => {
-                  setVariantCustomInput(e.target.value.toUpperCase());
-                  setVariantCustomError('');
+                  setAddMeasurementInput(e.target.value.toUpperCase());
+                  setAddMeasurementError('');
                 }}
                 autoFocus
                 style={{ height: '48px', textTransform: 'uppercase', marginBottom: '8px' }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleAddVariantCustomUnit();
+                    handleAddCustomMeasurement();
                   }
                 }}
               />
-              {variantCustomError && (
+              {addMeasurementError && (
                 <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '12px', fontWeight: 500 }}>
-                  {variantCustomError}
-                </div>
-              )}
-
-              {unitDeleteFeedback.text && (
-                <div style={{
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  marginBottom: '12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  background: unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                  color: unitDeleteFeedback.type === 'error' ? '#ef4444' : '#22c55e',
-                  border: `1px solid ${unitDeleteFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`
-                }}>
-                  {unitDeleteFeedback.text}
+                  {addMeasurementError}
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
                   type="button"
-                  onClick={() => setVariantCustomModalIndex(null)}
+                  onClick={() => {
+                    setShowAddMeasurementModal(false);
+                    setActiveVariantAddIndex(null);
+                  }}
                   style={{
                     flex: 1,
                     padding: '10px',
@@ -1439,74 +1435,26 @@ const EditProduct = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleAddVariantCustomUnit}
+                  onClick={handleAddCustomMeasurement}
                   style={{
                     flex: 1,
                     padding: '10px',
                     borderRadius: '10px',
-                    background: 'var(--primary, #6366f1)',
+                    background: '#22c55e',
                     color: '#fff',
                     border: 'none',
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}
                 >
-                  Add Unit
+                  Add Measurement
                 </button>
               </div>
-
-              {/* Manage Existing Custom Variant Units for this variant row */}
-              {variantCustomModalIndex !== null && (() => {
-                const currentVariantOpts = b2bVariants[variantCustomModalIndex]?.customUnitOptions || DEFAULT_VARIANT_UNITS;
-                const customOnly = currentVariantOpts.filter(u => !DEFAULT_VARIANT_UNITS.includes(u) && !DEFAULT_VARIANT_UNITS.includes(u.toLowerCase()));
-                if (customOnly.length === 0) return null;
-                return (
-                  <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Custom Variant Units ({customOnly.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
-                      {customOnly.map(u => (
-                        <div key={u} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 12px',
-                          background: 'rgba(255,255,255,0.03)',
-                          borderRadius: '8px',
-                          border: '1px solid var(--border-color)'
-                        }}>
-                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{u}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteVariantCustomUnit(variantCustomModalIndex, u)}
-                            disabled={unitDeleteLoading}
-                            title={`Delete custom variant unit "${u}"`}
-                            style={{
-                              background: 'rgba(239, 68, 68, 0.1)',
-                              border: 'none',
-                              color: '#ef4444',
-                              padding: '6px',
-                              borderRadius: '6px',
-                              cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
           </div>
         )}
 
-        {/* Modal: Standalone Custom Unit Management Interface */}
+        {/* Modal: Unified Custom Units Manager (Packaging & Measurement) */}
         {showManageUnitsModal && (
           <div style={{
             position: 'fixed',
@@ -1520,7 +1468,7 @@ const EditProduct = () => {
             padding: '20px'
           }}>
             <div className="glass-card" style={{
-              maxWidth: '480px',
+              maxWidth: '520px',
               width: '100%',
               borderRadius: '20px',
               padding: '28px',
@@ -1529,7 +1477,7 @@ const EditProduct = () => {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Trash2 size={18} color="#ef4444" /> Custom Unit Management
+                  <Trash2 size={18} color="#ef4444" /> Manage Custom Units
                 </h3>
                 <button
                   type="button"
@@ -1546,9 +1494,41 @@ const EditProduct = () => {
                 </button>
               </div>
 
-              <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '16px' }}>
-                Manage custom units created for your store. Standard defaults (BOX, BAG, pcs, etc.) cannot be deleted.
-              </p>
+              {/* Tabs: Packaging vs Measurement */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setManageModalTab('packaging')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: manageModalTab === 'packaging' ? 'var(--primary, #6366f1)' : 'rgba(255,255,255,0.05)',
+                    color: manageModalTab === 'packaging' ? '#fff' : 'var(--text-dim)',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Packaging Types ({packagingOptions.filter(u => !DEFAULT_PACKAGING.includes(u)).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManageModalTab('measurement')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: manageModalTab === 'measurement' ? '#22c55e' : 'rgba(255,255,255,0.05)',
+                    color: manageModalTab === 'measurement' ? '#fff' : 'var(--text-dim)',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Measurement Units ({measurementOptions.filter(m => !DEFAULT_MEASUREMENTS.includes(m.toUpperCase())).length})
+                </button>
+              </div>
 
               {unitDeleteFeedback.text && (
                 <div style={{
@@ -1565,108 +1545,175 @@ const EditProduct = () => {
                 </div>
               )}
 
-              {/* Main Custom Units */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Main B2B Custom Units ({mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length})
-                </div>
-                {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').length === 0 ? (
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '8px 0' }}>
-                    No custom main units added yet.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '140px', overflowY: 'auto' }}>
-                    {mainUnitOptions.filter(u => u !== 'BOX' && u !== 'BAG').map(u => (
-                      <div key={u} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        background: 'rgba(255,255,255,0.03)',
+              {/* Packaging Tab Content */}
+              {manageModalTab === 'packaging' && (
+                <div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Add new packaging (e.g. CARTON)"
+                      value={addPackagingInput}
+                      onChange={(e) => setAddPackagingInput(e.target.value.toUpperCase())}
+                      style={{ height: '42px', textTransform: 'uppercase' }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomPackaging();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomPackaging}
+                      style={{
+                        padding: '0 16px',
+                        background: 'var(--primary, #6366f1)',
+                        color: '#fff',
+                        border: 'none',
                         borderRadius: '10px',
-                        border: '1px solid var(--border-color)'
-                      }}>
-                        <div>
-                          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{u}</span>
-                          {formData.unit === u && (
-                            <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--primary, #6366f1)', fontWeight: 600 }}>
-                              (Currently Selected)
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMainCustomUnit(u)}
-                          disabled={unitDeleteLoading}
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.2)',
-                            color: '#ef4444',
-                            padding: '6px 12px',
-                            borderRadius: '8px',
-                            cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            fontSize: '12px',
-                            fontWeight: 600
-                          }}
-                        >
-                          <Trash2 size={13} /> Delete
-                        </button>
-                      </div>
-                    ))}
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      Add
+                    </button>
                   </div>
-                )}
-              </div>
 
-              {/* Variant Custom Units */}
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Variant Custom Units ({globalVariantCustomUnits.length})
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase', fontWeight: 700 }}>
+                    Custom Packaging Types
+                  </div>
+
+                  {packagingOptions.filter(u => !DEFAULT_PACKAGING.includes(u)).length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '12px 0' }}>
+                      No custom packaging types added yet. Default packaging (BAG, BOX) are always available.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                      {packagingOptions.filter(u => !DEFAULT_PACKAGING.includes(u)).map(u => (
+                        <div key={u} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)'
+                        }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{u}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePackaging(u)}
+                            disabled={unitDeleteLoading}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: 'none',
+                              color: '#ef4444',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '12px',
+                              fontWeight: 600
+                            }}
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {globalVariantCustomUnits.length === 0 ? (
-                  <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '8px 0' }}>
-                    No custom variant units added yet.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '140px', overflowY: 'auto' }}>
-                    {globalVariantCustomUnits.map(u => (
-                      <div key={u} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        background: 'rgba(255,255,255,0.03)',
+              )}
+
+              {/* Measurement Tab Content */}
+              {manageModalTab === 'measurement' && (
+                <div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Add new measurement (e.g. MTR)"
+                      value={addMeasurementInput}
+                      onChange={(e) => setAddMeasurementInput(e.target.value.toUpperCase())}
+                      style={{ height: '42px', textTransform: 'uppercase' }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomMeasurement();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomMeasurement}
+                      style={{
+                        padding: '0 16px',
+                        background: '#22c55e',
+                        color: '#fff',
+                        border: 'none',
                         borderRadius: '10px',
-                        border: '1px solid var(--border-color)'
-                      }}>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{u}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteVariantCustomUnit(null, u)}
-                          disabled={unitDeleteLoading}
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            border: '1px solid rgba(239, 68, 68, 0.2)',
-                            color: '#ef4444',
-                            padding: '6px 12px',
-                            borderRadius: '8px',
-                            cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            fontSize: '12px',
-                            fontWeight: 600
-                          }}
-                        >
-                          <Trash2 size={13} /> Delete
-                        </button>
-                      </div>
-                    ))}
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      Add
+                    </button>
                   </div>
-                )}
-              </div>
+
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase', fontWeight: 700 }}>
+                    Custom Measurement Units
+                  </div>
+
+                  {measurementOptions.filter(m => !DEFAULT_MEASUREMENTS.includes(m.toUpperCase())).length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '12px 0' }}>
+                      No custom measurement units added yet. Default measurement units (KG, LITRE) are always available.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                      {measurementOptions.filter(m => !DEFAULT_MEASUREMENTS.includes(m.toUpperCase())).map(m => (
+                        <div key={m} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)'
+                        }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>{m.toUpperCase()}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMeasurement(m)}
+                            disabled={unitDeleteLoading}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: 'none',
+                              color: '#ef4444',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              cursor: unitDeleteLoading ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '12px',
+                              fontWeight: 600
+                            }}
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
                 <button

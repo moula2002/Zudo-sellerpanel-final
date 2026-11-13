@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { IMAGE_BASE_URL, getImageUrl } from '../utils/api';
+import { calculateB2bPricing } from '../utils/pricing';
 import { Package, Plus, Search, Filter, MoreVertical, Edit2, Trash2, Eye, X, IndianRupee, Percent } from 'lucide-react';
 import Layout from '../components/Layout';
 
@@ -8,17 +9,31 @@ const ProductDetailModal = ({ product, onClose }) => {
   if (!product) return null;
 
   const gstRate = product.gstRate || product.gstPercent || 0;
-  
-  // Base B2B wholesale prices
-  const sellerPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
-    ? Number(product.sellerB2bPrice)
-    : (product.sellerPrice !== undefined && product.sellerPrice !== null
-        ? Number(product.sellerPrice)
-        : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
-            ? Number(product.b2b[0].sellerPrice)
-            : Number(product.b2bPrice || product.price || 0)));
+  const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
+  const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
+  const rawBase = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+    ? Number(product.sellerPricePerBaseUnit)
+    : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
+        ? Number(product.sellerB2bPrice)
+        : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+            ? Number(product.sellerPrice)
+            : Number(product.price || 0)));
 
-  const customerTotalWithGst = sellerPrice + (sellerPrice * gstRate) / 100;
+  const pricing = calculateB2bPricing({
+    basePrice: rawBase,
+    unitSize: uSize,
+    gstRate: gstRate,
+    quantity: 1
+  });
+
+  const sellerPrice = rawBase;
+  const customerTotalWithGst = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
+    ? Number(product.customerFinalPricePerProductUnit)
+    : (product.price !== undefined && Number(product.price) > 0
+        ? Number(product.price)
+        : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
+            ? Number(product.b2bPrice)
+            : pricing.customerPricePerPackage));
 
   return (
     <div style={{
@@ -418,16 +433,28 @@ const Products = () => {
                 </td>
               </tr>
             ) : filteredProducts.map((product) => {
-              const sellerPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
-                ? product.sellerB2bPrice
-                : (product.sellerPrice !== undefined && product.sellerPrice !== null
-                    ? product.sellerPrice
-                    : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
-                        ? product.b2b[0].sellerPrice
-                        : (product.b2bPrice || product.price || 0)));
-
               const displayGstRate = product.gstRate || product.gstPercent || 0;
-              const customerPriceWithGst = sellerPrice + (sellerPrice * displayGstRate) / 100;
+              const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
+              const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
+              // Seller Price = Base Price (never multiplied by unit size)
+              const baseSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+                ? Number(product.sellerPricePerBaseUnit)
+                : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
+                    ? Number(product.sellerB2bPrice)
+                    : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+                        ? Number(product.sellerPrice)
+                        : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
+                            ? Number(product.b2b[0].sellerPrice)
+                            : Number(product.price || 0))));
+
+              // Customer Price = Base Price + Total Commission (+ GST)
+              const baseCustomerPrice = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
+                ? Number(product.customerFinalPricePerProductUnit)
+                : (product.price !== undefined && Number(product.price) > 0
+                    ? Number(product.price)
+                    : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
+                        ? Number(product.b2bPrice)
+                        : (baseSellerPrice + (product.commissionAmount || 0))));
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -453,17 +480,11 @@ const Products = () => {
                   </td>
                   <td style={{ padding: '16px 20px' }}>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
-                      ₹{product.priceBasis === 'per_package' ? sellerPrice : (product.sellerPricePerProductUnit || (sellerPrice * (product.unitSize || 1)))}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
-                      {product.priceBasis === 'per_package'
-                        ? `₹${sellerPrice} / ${product.packagingType || product.unit || 'BAG'}`
-                        : `₹${sellerPrice} / ${(product.measurementBasis || product.measurementUnit || 'KG').toUpperCase()}`
-                      }
+                      ₹{baseSellerPrice}
                     </div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>₹{customerPriceWithGst.toFixed(2)}</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>₹{baseCustomerPrice.toFixed(2)}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
                       {displayGstRate}% GST
                     </div>
@@ -566,16 +587,28 @@ const Products = () => {
             No products found.
           </div>
         ) : filteredProducts.map((product) => {
-          const sellerPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null
-            ? product.sellerB2bPrice
-            : (product.sellerPrice !== undefined && product.sellerPrice !== null
-                ? product.sellerPrice
-                : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
-                    ? product.b2b[0].sellerPrice
-                    : (product.b2bPrice || product.price || 0)));
-
           const displayGstRate = product.gstRate || product.gstPercent || 0;
-          const customerPriceWithGst = sellerPrice + (sellerPrice * displayGstRate) / 100;
+          const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
+          const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
+          // Seller Price = Base Price (never multiplied by unit size)
+          const baseSellerPrice = product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
+            ? Number(product.sellerPricePerBaseUnit)
+            : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
+                ? Number(product.sellerB2bPrice)
+                : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+                    ? Number(product.sellerPrice)
+                    : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined
+                        ? Number(product.b2b[0].sellerPrice)
+                        : Number(product.price || 0))));
+
+          // Customer Price = Base Price + Total Commission (+ GST)
+          const baseCustomerPrice = product.customerFinalPricePerProductUnit !== undefined && Number(product.customerFinalPricePerProductUnit) > 0
+            ? Number(product.customerFinalPricePerProductUnit)
+            : (product.price !== undefined && Number(product.price) > 0
+                ? Number(product.price)
+                : (product.b2bPrice !== undefined && Number(product.b2bPrice) > 0
+                    ? Number(product.b2bPrice)
+                    : (baseSellerPrice + (product.commissionAmount || 0))));
 
           return (
             <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', gap: '16px' }}>
@@ -592,10 +625,10 @@ const Products = () => {
                 <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>{product.categoryId?.name}</div>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600 }}>Seller: <strong style={{ fontWeight: 800 }}>₹{sellerPrice}</strong></span>
-                  <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 800 }}>Customer: ₹{customerPriceWithGst.toFixed(2)}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600 }}>Seller: <strong style={{ fontWeight: 800 }}>₹{baseSellerPrice}</strong></span>
+                  <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 800 }}>Customer: ₹{baseCustomerPrice.toFixed(2)}</span>
                   <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--text-main)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase' }}>
-                    {product.unit || 'pcs'}
+                    {product.packagingType || product.unit || 'BOX'}
                   </span>
                 </div>
 
