@@ -112,12 +112,12 @@ const EditProduct = () => {
         const baseSellerB2bPrice = p.sellerPricePerBaseUnit !== undefined && p.sellerPricePerBaseUnit !== null && Number(p.sellerPricePerBaseUnit) > 0
           ? String(p.sellerPricePerBaseUnit)
           : (p.sellerB2bPrice !== undefined && p.sellerB2bPrice !== null
-              ? (Number(p.unitSize) > 1 && Number(p.sellerB2bPrice) > Number(p.sellerPricePerBaseUnit || 0) && p.sellerPricePerBaseUnit !== undefined
-                  ? String(p.sellerPricePerBaseUnit)
-                  : String(p.sellerB2bPrice))
-              : (p.sellerPrice !== undefined && p.sellerPrice !== null
-                  ? (Number(p.unitSize) > 1 ? String(Math.round((Number(p.sellerPrice) / Number(p.unitSize)) * 100) / 100) : String(p.sellerPrice))
-                  : String(p.b2bPrice || p.price || '')));
+            ? (Number(p.unitSize) > 1 && Number(p.sellerB2bPrice) > Number(p.sellerPricePerBaseUnit || 0) && p.sellerPricePerBaseUnit !== undefined
+              ? String(p.sellerPricePerBaseUnit)
+              : String(p.sellerB2bPrice))
+            : (p.sellerPrice !== undefined && p.sellerPrice !== null
+              ? (Number(p.unitSize) > 1 ? String(Math.round((Number(p.sellerPrice) / Number(p.unitSize)) * 100) / 100) : String(p.sellerPrice))
+              : String(p.b2bPrice || p.price || '')));
 
         const commType = p.commissionType || 'flat';
         const commVal = p.commissionValue !== undefined && p.commissionValue !== null
@@ -216,10 +216,10 @@ const EditProduct = () => {
           const vSeller = v.sellerPricePerBaseUnit !== undefined && v.sellerPricePerBaseUnit !== null && Number(v.sellerPricePerBaseUnit) > 0
             ? String(v.sellerPricePerBaseUnit)
             : (v.sellerPrice !== undefined && v.sellerPrice !== null && v.sellerPrice !== ''
-                ? (Number(vUnitSize) > 1 ? String(Math.round((Number(v.sellerPrice) / Number(vUnitSize)) * 100) / 100) : String(v.sellerPrice))
-                : (v.sellerPricePerProductUnit !== undefined && v.sellerPricePerProductUnit !== null && v.sellerPricePerProductUnit !== ''
-                    ? (Number(vUnitSize) > 1 ? String(Math.round((Number(v.sellerPricePerProductUnit) / Number(vUnitSize)) * 100) / 100) : String(v.sellerPricePerProductUnit))
-                    : (v.price ? String(v.price) : '')));
+              ? (Number(vUnitSize) > 1 ? String(Math.round((Number(v.sellerPrice) / Number(vUnitSize)) * 100) / 100) : String(v.sellerPrice))
+              : (v.sellerPricePerProductUnit !== undefined && v.sellerPricePerProductUnit !== null && v.sellerPricePerProductUnit !== ''
+                ? (Number(vUnitSize) > 1 ? String(Math.round((Number(v.sellerPricePerProductUnit) / Number(vUnitSize)) * 100) / 100) : String(v.sellerPricePerProductUnit))
+                : (v.price ? String(v.price) : '')));
           let variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'KG').toUpperCase();
           if (variantMeas === 'BAG' || variantMeas === 'BOX') {
             variantMeas = 'KG';
@@ -909,43 +909,7 @@ const EditProduct = () => {
                   />
                 </div>
 
-                {/* Package Measurement & Seller Price Calculation Banner */}
-                <div style={{
-                  gridColumn: '1 / -1',
-                  background: 'rgba(99, 102, 241, 0.08)',
-                  border: '1px solid rgba(99, 102, 241, 0.25)',
-                  padding: '14px 18px',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '16px'
-                }}>
-                  <div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Package Specification</span>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
-                      1 {(formData.unit || 'BAG').toUpperCase()} = {formData.unitSize || 1} {(formData.measurementUnit || 'KG').toUpperCase()}
-                    </div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Package Price (1 {(formData.unit || 'BAG').toUpperCase()})</span>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
-                      ₹{(Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)).toFixed(2)}
-                    </div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '11px', color: '#16a34a', textTransform: 'uppercase', fontWeight: 700 }}>
-                      Customer Final Price ({parseFloat(formData.gstPercent || 0)}% GST)
-                    </span>
-                    <div style={{ fontSize: '16px', fontWeight: 900, color: '#16a34a' }}>
-                      ₹{((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) + ((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)}
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginLeft: '6px' }}>
-                        (+₹{(((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)} GST)
-                      </span>
-                    </div>
-                  </div>
-                </div>
+
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>Maximum order quantity</label>
