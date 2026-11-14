@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react';
 import api from '../utils/api';
-import { Truck, Package, CheckCircle, AlertCircle, User, FileText, Phone } from 'lucide-react';
+import { Truck, Package, CheckCircle, AlertCircle, User, FileText, Phone, RefreshCw } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatOrderNumber } from '../utils/orderFormat';
+
+const completedPickupStatuses = new Set([
+  'Picked Up',
+  'Out for Delivery',
+  'Shipped',
+  'Delivered',
+  'Partially Returned',
+  'Returned'
+]);
 
 const formatMoney = (value) => {
   const amount = Number(value);
@@ -164,26 +173,46 @@ const Pickups = () => {
   const [pickups, setPickups] = useState([]);
   const [seller, setSeller] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
+    let active = true;
     const initData = async () => {
-      try {
-        const [pickupsRes, sellerRes] = await Promise.all([
-          api.get('/sellers/pickups'),
-          api.get('/sellers/me')
-        ]);
-        setPickups(pickupsRes.data);
-        setSeller(sellerRes.data);
-      } catch (err) {
-        console.error('Failed to fetch pickup data:', err);
-      } finally {
-        setLoading(false);
+      setLoading(true);
+      setError('');
+      const [pickupsResult, sellerResult] = await Promise.allSettled([
+        api.get('/sellers/pickups'),
+        api.get('/sellers/me')
+      ]);
+      if (!active) return;
+
+      if (pickupsResult.status === 'fulfilled' && Array.isArray(pickupsResult.value.data)) {
+        setPickups(pickupsResult.value.data);
+      } else {
+        const requestError = pickupsResult.status === 'rejected'
+          ? pickupsResult.reason
+          : null;
+        console.error('Failed to fetch pickup data:', requestError || 'Invalid pickup response');
+        setPickups([]);
+        setError(requestError?.response?.data?.message || 'Could not load pickups. Please retry.');
       }
+
+      if (sellerResult.status === 'fulfilled') {
+        setSeller(sellerResult.value.data);
+      } else {
+        console.error('Failed to fetch seller profile for pickup slips:', sellerResult.reason);
+      }
+
+      setLoading(false);
     };
     initData();
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [retryKey]);
 
   const generateInvoice = (pickup) => {
     const invoiceWindow = window.open('', '_blank');
@@ -304,7 +333,7 @@ const Pickups = () => {
 
   const filteredPickups = pickups.filter(pickup => {
     if (filterType === 'Pending / Packed' && !['Pending', 'Packed'].includes(pickup.status)) return false;
-    if (filterType === 'Completed' && ['Pending', 'Packed'].includes(pickup.status)) return false;
+    if (filterType === 'Completed' && !completedPickupStatuses.has(pickup.status)) return false;
 
     const search = searchTerm.toLowerCase();
     const searchable = [
@@ -364,13 +393,20 @@ const Pickups = () => {
         <div className="glass-card" style={{ padding: '16px', borderRadius: '20px', textAlign: 'center', border: '1px solid var(--border-color)', background: 'var(--card-bg)' }}>
           <CheckCircle size={24} color="#22c55e" style={{ marginBottom: '8px' }} />
           <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>Completed Pickups</div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>{pickups.filter(pickup => !['Pending', 'Packed'].includes(pickup.status)).length}</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>{pickups.filter(pickup => completedPickupStatuses.has(pickup.status)).length}</div>
         </div>
       </div>
 
       <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '24px' }}>Upcoming Pickups</h2>
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px' }}><div className="animate-spin" style={{ display: 'inline-block' }}><Truck size={24} /></div></div>
+      ) : error ? (
+        <div className="glass-card" role="alert" style={{ padding: '32px', borderRadius: '24px', textAlign: 'center', color: 'var(--text-dim)' }}>
+          <p>{error}</p>
+          <button type="button" onClick={() => setRetryKey(current => current + 1)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <RefreshCw size={16} /> Retry
+          </button>
+        </div>
       ) : filteredPickups.length === 0 ? (
         <div className="glass-card" style={{ padding: '60px', borderRadius: '24px', textAlign: 'center' }}>
           <Package size={32} color="#64748b" style={{ marginBottom: '16px' }} />

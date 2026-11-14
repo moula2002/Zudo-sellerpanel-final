@@ -7,7 +7,7 @@ import {
 import Layout from '../components/Layout';
 import api from '../utils/api';
 
-const HISTORY_API_ENABLED = import.meta.env.VITE_SELLER_HISTORY_API_ENABLED === 'true';
+const HISTORY_API_ENABLED = import.meta.env.VITE_SELLER_HISTORY_API_ENABLED !== 'false';
 
 const categories = [
   { id: 'all', label: 'All Activities' },
