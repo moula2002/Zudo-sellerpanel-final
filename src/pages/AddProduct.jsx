@@ -425,13 +425,15 @@ const AddProduct = () => {
       }
 
       // Explicitly set wholesale pricing without commission addition
-      data.append('sellerB2bPrice', sellerB2bVal);
-      data.append('sellerPrice', sellerB2bVal);
-      data.append('sellerPricePerBaseUnit', unitSizeNum > 0 ? Math.round((sellerB2bVal / unitSizeNum) * 100) / 100 : sellerB2bVal);
-      data.append('sellerPricePerProductUnit', sellerB2bVal);
-      data.append('sellerUnitPrice', sellerB2bVal);
-      data.append('b2bPrice', sellerB2bVal);
-      data.append('price', sellerB2bVal);
+      // sellerB2bVal is price per base measurement unit (e.g. per 1 KG)
+      const packagePrice = sellerB2bVal * unitSizeNum;
+      data.append('sellerB2bPrice', packagePrice);
+      data.append('sellerPrice', packagePrice);
+      data.append('sellerPricePerBaseUnit', sellerB2bVal);
+      data.append('sellerPricePerProductUnit', packagePrice);
+      data.append('sellerUnitPrice', packagePrice);
+      data.append('b2bPrice', packagePrice);
+      data.append('price', packagePrice);
       data.append('commissionType', 'flat');
       data.append('commissionValue', 0);
       data.append('commissionAmount', 0);
@@ -484,8 +486,8 @@ const AddProduct = () => {
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
-          const pkgPrice = rawPrice; // Seller Base Price is NOT multiplied by uSize
-          const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;
+          const basePrice = rawPrice;
+          const pkgPrice = rawPrice * uSize;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -881,19 +883,19 @@ const AddProduct = () => {
                   </div>
                 </div>
                 <div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Base Price</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Package Price (1 {(formData.unit || 'BAG').toUpperCase()})</span>
                   <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
-                    ₹{Number(formData.sellerB2bPrice || 0).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()}
+                    ₹{(Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)).toFixed(2)}
                   </div>
                 </div>
                 <div>
                   <span style={{ fontSize: '11px', color: '#16a34a', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Customer Price ({parseFloat(formData.gstPercent || 0)}% GST)
+                    Customer Final Price ({parseFloat(formData.gstPercent || 0)}% GST)
                   </span>
                   <div style={{ fontSize: '16px', fontWeight: 900, color: '#16a34a' }}>
-                    ₹{(Number(formData.sellerB2bPrice || 0) + (Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)}
+                    ₹{((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) + ((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)}
                     <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginLeft: '6px' }}>
-                      (+₹{((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)} GST)
+                      (+₹{(((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)} GST)
                     </span>
                   </div>
                 </div>
@@ -1114,7 +1116,7 @@ const AddProduct = () => {
                             1 {vPkgType} = {vUnitSize} {vMeas}
                           </span>
                           <span style={{ color: '#22c55e', fontWeight: 700 }}>
-                            Payout / {vPkgType}: ₹{vSellerPrice.toFixed(2)}
+                            Payout / {vPkgType}: ₹{(vSellerPrice * vUnitSize).toFixed(2)}
                           </span>
                         </div>
                       </div>

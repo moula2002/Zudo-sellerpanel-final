@@ -108,12 +108,16 @@ const EditProduct = () => {
         setCommissions(commRes.data || []);
         const p = productRes.data;
 
-        // Resolve base wholesale selling price
-        const baseSellerB2bPrice = p.sellerB2bPrice !== undefined && p.sellerB2bPrice !== null
-          ? String(p.sellerB2bPrice)
-          : (p.sellerPrice !== undefined && p.sellerPrice !== null
-              ? String(p.sellerPrice)
-              : String(p.b2bPrice || p.price || ''));
+        // Resolve base wholesale selling price per base unit (e.g. per 1 KG)
+        const baseSellerB2bPrice = p.sellerPricePerBaseUnit !== undefined && p.sellerPricePerBaseUnit !== null && Number(p.sellerPricePerBaseUnit) > 0
+          ? String(p.sellerPricePerBaseUnit)
+          : (p.sellerB2bPrice !== undefined && p.sellerB2bPrice !== null
+              ? (Number(p.unitSize) > 1 && Number(p.sellerB2bPrice) > Number(p.sellerPricePerBaseUnit || 0) && p.sellerPricePerBaseUnit !== undefined
+                  ? String(p.sellerPricePerBaseUnit)
+                  : String(p.sellerB2bPrice))
+              : (p.sellerPrice !== undefined && p.sellerPrice !== null
+                  ? (Number(p.unitSize) > 1 ? String(Math.round((Number(p.sellerPrice) / Number(p.unitSize)) * 100) / 100) : String(p.sellerPrice))
+                  : String(p.b2bPrice || p.price || '')));
 
         const commType = p.commissionType || 'flat';
         const commVal = p.commissionValue !== undefined && p.commissionValue !== null
@@ -171,9 +175,7 @@ const EditProduct = () => {
         setFormData({
           name: p.name || '',
           description: p.description || '',
-          sellerB2bPrice: loadedPriceBasis === 'per_unit' && p.sellerPricePerBaseUnit !== undefined && p.sellerPricePerBaseUnit !== null
-            ? String(p.sellerPricePerBaseUnit)
-            : baseSellerB2bPrice,
+          sellerB2bPrice: baseSellerB2bPrice,
           b2bPrice: p.b2bPrice ? String(p.b2bPrice) : (p.price ? String(p.price) : ''),
           priceBasis: loadedPriceBasis,
           commissionType: commType,
@@ -211,11 +213,13 @@ const EditProduct = () => {
           const parsed = parsePacketSize(v.packetSize);
           const vUnitSize = v.unitSize !== undefined && v.unitSize !== null ? String(v.unitSize) : (v.sizeValue ? String(v.sizeValue) : (parsed.val || '1'));
           const vPriceBasis = v.priceBasis || 'per_package';
-          const vSeller = v.sellerPrice !== undefined && v.sellerPrice !== null && v.sellerPrice !== ''
-            ? String(v.sellerPrice)
-            : (v.sellerPricePerProductUnit !== undefined && v.sellerPricePerProductUnit !== null && v.sellerPricePerProductUnit !== ''
-                ? String(v.sellerPricePerProductUnit)
-                : (v.price ? String(v.price) : (v.sellerPricePerBaseUnit !== undefined ? String(v.sellerPricePerBaseUnit) : '')));
+          const vSeller = v.sellerPricePerBaseUnit !== undefined && v.sellerPricePerBaseUnit !== null && Number(v.sellerPricePerBaseUnit) > 0
+            ? String(v.sellerPricePerBaseUnit)
+            : (v.sellerPrice !== undefined && v.sellerPrice !== null && v.sellerPrice !== ''
+                ? (Number(vUnitSize) > 1 ? String(Math.round((Number(v.sellerPrice) / Number(vUnitSize)) * 100) / 100) : String(v.sellerPrice))
+                : (v.sellerPricePerProductUnit !== undefined && v.sellerPricePerProductUnit !== null && v.sellerPricePerProductUnit !== ''
+                    ? (Number(vUnitSize) > 1 ? String(Math.round((Number(v.sellerPricePerProductUnit) / Number(vUnitSize)) * 100) / 100) : String(v.sellerPricePerProductUnit))
+                    : (v.price ? String(v.price) : '')));
           let variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'KG').toUpperCase();
           if (variantMeas === 'BAG' || variantMeas === 'BOX') {
             variantMeas = 'KG';
@@ -272,16 +276,16 @@ const EditProduct = () => {
   };
 
   const handleAddB2b = () => setB2bVariants([
-    ...b2bVariants, 
-    { 
-      packetSizeVal: '', 
+    ...b2bVariants,
+    {
+      packetSizeVal: '',
       packetSizeUnit: formData.measurementUnit || 'KG',
       packagingType: formData.unit || 'BAG',
       priceBasis: 'per_unit',
-      sellerPrice: '', 
-      price: '', 
+      sellerPrice: '',
+      price: '',
       gstPercent: formData.gstPercent || 0,
-      stock: '' 
+      stock: ''
     }
   ]);
   const handleRemoveB2b = (index) => setB2bVariants(b2bVariants.filter((_, i) => i !== index));
@@ -334,7 +338,7 @@ const EditProduct = () => {
     }
 
     setPackagingOptions(prev => Array.from(new Set([...prev, clean])));
-    
+
     // If triggered from variant row, set it for that variant; otherwise for main form
     if (activeVariantAddIndex !== null && b2bVariants[activeVariantAddIndex]) {
       const newVariants = [...b2bVariants];
@@ -517,6 +521,9 @@ const EditProduct = () => {
         imageUrl = `${IMAGE_BASE_URL}${imgRes.url}`;
       }
 
+      const unitSizeVal = parseFloat(formData.unitSize) || 1;
+      const packagePrice = sellerB2bVal * unitSizeVal;
+
       const formattedB2b = b2bVariants
         .filter(v => v.packetSizeVal && (v.sellerPrice || v.price))
         .map(v => {
@@ -525,8 +532,8 @@ const EditProduct = () => {
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
 
-          const pkgPrice = rawPrice;
-          const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;
+          const basePrice = rawPrice;
+          const pkgPrice = rawPrice * uSize;
           return {
             packetSize: `${v.packetSizeVal}${v.packetSizeUnit}`,
             sizeValue: uSize,
@@ -567,20 +574,20 @@ const EditProduct = () => {
         packagingType: (formData.packagingType || formData.unit || 'BAG').toUpperCase(),
         measurementBasis: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
         measurementUnit: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
-        priceBasis: 'per_unit',
-        isPackagePrice: false,
-        unitSize: parseFloat(formData.unitSize) || 1,
+        priceBasis: 'per_package',
+        isPackagePrice: true,
+        unitSize: unitSizeVal,
         customUnits: customUnitsToSave,
         customPackagingUnits: customUnitsToSave,
         customMeasurementUnits: customMeasToSave,
         subCategoryId: cleanSubCategoryId,
-        sellerB2bPrice: sellerB2bVal,
-        sellerPrice: sellerB2bVal,
+        sellerB2bPrice: packagePrice,
+        sellerPrice: packagePrice,
         sellerPricePerBaseUnit: sellerB2bVal,
-        sellerPricePerProductUnit: sellerB2bVal,
-        sellerUnitPrice: sellerB2bVal,
-        b2bPrice: sellerB2bVal,
-        price: sellerB2bVal,
+        sellerPricePerProductUnit: packagePrice,
+        sellerUnitPrice: packagePrice,
+        b2bPrice: packagePrice,
+        price: packagePrice,
         commissionType: 'flat',
         commissionValue: 0,
         commissionAmount: 0,
@@ -683,9 +690,9 @@ const EditProduct = () => {
               }
             }
           `}</style>
-          
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            
+
             {/* General Info Card */}
             <div className="glass-card" style={{ padding: '30px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '25px' }}>
@@ -922,19 +929,19 @@ const EditProduct = () => {
                     </div>
                   </div>
                   <div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Seller Base Price</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Package Price (1 {(formData.unit || 'BAG').toUpperCase()})</span>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
-                      ₹{Number(formData.sellerB2bPrice || 0).toFixed(2)} / {(formData.unit || 'BAG').toUpperCase()}
+                      ₹{(Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)).toFixed(2)}
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '11px', color: '#16a34a', textTransform: 'uppercase', fontWeight: 700 }}>
-                      Customer Price ({parseFloat(formData.gstPercent || 0)}% GST)
+                      Customer Final Price ({parseFloat(formData.gstPercent || 0)}% GST)
                     </span>
                     <div style={{ fontSize: '16px', fontWeight: 900, color: '#16a34a' }}>
-                      ₹{(Number(formData.sellerB2bPrice || 0) + (Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)}
+                      ₹{((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) + ((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)}
                       <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-dim)', marginLeft: '6px' }}>
-                        (+₹{((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)} GST)
+                        (+₹{(((Number(formData.sellerB2bPrice || 0) * (parseFloat(formData.unitSize) || 1)) * (parseFloat(formData.gstPercent || 0) / 100))).toFixed(2)} GST)
                       </span>
                     </div>
                   </div>
@@ -1001,9 +1008,9 @@ const EditProduct = () => {
                           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                             <div style={{ flex: 1.2, minWidth: '100px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Packaging Type *</label>
-                              <select 
-                                className="input-field" 
-                                value={variant.packagingType || formData.unit || 'BAG'} 
+                              <select
+                                className="input-field"
+                                value={variant.packagingType || formData.unit || 'BAG'}
                                 onChange={(e) => handleB2bChange(index, 'packagingType', e.target.value)}
                                 required
                                 style={{ height: '48px', cursor: 'pointer' }}
@@ -1022,25 +1029,25 @@ const EditProduct = () => {
 
                             <div style={{ flex: 1, minWidth: '90px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Unit Size *</label>
-                              <input 
-                                type="number" 
-                                className="input-field" 
-                                value={variant.packetSizeVal} 
-                                onChange={(e) => handleB2bChange(index, 'packetSizeVal', e.target.value)} 
-                                placeholder="e.g. 10" 
-                                required 
-                                min="0.01" 
-                                step="any" 
+                              <input
+                                type="number"
+                                className="input-field"
+                                value={variant.packetSizeVal}
+                                onChange={(e) => handleB2bChange(index, 'packetSizeVal', e.target.value)}
+                                placeholder="e.g. 10"
+                                required
+                                min="0.01"
+                                step="any"
                                 style={{ height: '48px' }}
                               />
                             </div>
 
                             <div style={{ flex: 1.1, minWidth: '100px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Measurement *</label>
-                              <select 
-                                className="input-field" 
-                                value={variant.packetSizeUnit} 
-                                onChange={(e) => handleB2bChange(index, 'packetSizeUnit', e.target.value)} 
+                              <select
+                                className="input-field"
+                                value={variant.packetSizeUnit}
+                                onChange={(e) => handleB2bChange(index, 'packetSizeUnit', e.target.value)}
                                 required
                                 style={{ height: '48px', cursor: 'pointer' }}
                               >
@@ -1058,15 +1065,15 @@ const EditProduct = () => {
 
                             <div style={{ flex: 1.2, minWidth: '110px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Price (₹) *</label>
-                              <input 
-                                type="number" 
-                                className="input-field" 
-                                value={variant.sellerPrice} 
-                                onChange={(e) => handleB2bChange(index, 'sellerPrice', e.target.value)} 
-                                placeholder="Price" 
-                                min="0" 
-                                step="0.01" 
-                                required 
+                              <input
+                                type="number"
+                                className="input-field"
+                                value={variant.sellerPrice}
+                                onChange={(e) => handleB2bChange(index, 'sellerPrice', e.target.value)}
+                                placeholder="Price"
+                                min="0"
+                                step="0.01"
+                                required
                                 style={{ height: '48px' }}
                               />
                               <span style={{ fontSize: '10px', color: 'var(--text-dim)', marginTop: '2px', display: 'block' }}>
@@ -1076,23 +1083,23 @@ const EditProduct = () => {
 
                             <div style={{ flex: 0.8, minWidth: '80px' }}>
                               <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-main)', marginBottom: '4px', fontWeight: 600 }}>Stock *</label>
-                              <input 
-                                type="number" 
-                                className="input-field" 
-                                value={variant.stock} 
-                                onChange={(e) => handleB2bChange(index, 'stock', e.target.value)} 
-                                placeholder="Stock" 
-                                min="0" 
-                                required 
+                              <input
+                                type="number"
+                                className="input-field"
+                                value={variant.stock}
+                                onChange={(e) => handleB2bChange(index, 'stock', e.target.value)}
+                                placeholder="Stock"
+                                min="0"
+                                required
                                 style={{ height: '48px' }}
                               />
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <label style={{ display: 'block', fontSize: '11px', opacity: 0, marginBottom: '4px', pointerEvents: 'none', userSelect: 'none' }}>Action</label>
-                              <button 
-                                type="button" 
-                                onClick={() => handleRemoveB2b(index)} 
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveB2b(index)}
                                 style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '12px', borderRadius: '12px', cursor: 'pointer', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                 title="Remove Variant"
                               >
@@ -1107,7 +1114,7 @@ const EditProduct = () => {
                               1 {vPkgType} = {vUnitSize} {vMeas}
                             </span>
                             <span style={{ color: '#22c55e', fontWeight: 700 }}>
-                              Payout / {vPkgType}: ₹{vSeller.toFixed(2)}
+                              Payout / {vPkgType}: ₹{(vSeller * vUnitSize).toFixed(2)}
                             </span>
                           </div>
                         </div>
