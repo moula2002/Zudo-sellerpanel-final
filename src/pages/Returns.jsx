@@ -51,9 +51,12 @@ const Returns = () => {
   const fetchReturns = async () => {
     try {
       const { data } = await api.get('/sellers/returns');
-      setReturns(data);
+      // Handle both array response and { returns: [...] } shaped response
+      const list = Array.isArray(data) ? data : (data?.returns || data?.data || []);
+      setReturns(list);
     } catch (err) {
       console.error('Failed to fetch returns:', err);
+      setReturns([]);
     } finally {
       setLoading(false);
     }
@@ -275,8 +278,18 @@ const Returns = () => {
               </tr>
             ) : filteredReturns.length === 0 ? (
               <tr>
-                <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-dim)' }}>
-                  No return orders found.
+                <td colSpan="5" style={{ padding: '60px 40px', textAlign: 'center', color: 'var(--text-dim)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                    <RefreshCcw size={36} style={{ opacity: 0.3 }} />
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                      {searchTerm ? 'No matching return orders found.' : 'No return orders yet.'}
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-dim)', maxWidth: '340px', lineHeight: 1.6 }}>
+                      {searchTerm
+                        ? 'Try a different search term or clear the search.'
+                        : 'Return orders will appear here when customers submit a return request for a delivered order.'}
+                    </div>
+                  </div>
                 </td>
               </tr>
             ) : filteredReturns.map((order) => (
