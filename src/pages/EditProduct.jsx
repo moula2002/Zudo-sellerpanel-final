@@ -210,10 +210,12 @@ const EditProduct = () => {
         const parsedB2b = (p.b2b || []).map(v => {
           const parsed = parsePacketSize(v.packetSize);
           const vUnitSize = v.unitSize !== undefined && v.unitSize !== null ? String(v.unitSize) : (v.sizeValue ? String(v.sizeValue) : (parsed.val || '1'));
-          const vPriceBasis = v.priceBasis || loadedPriceBasis || 'per_unit';
-          const vSeller = vPriceBasis === 'per_unit' && v.sellerPricePerBaseUnit !== undefined && v.sellerPricePerBaseUnit !== null
-            ? String(v.sellerPricePerBaseUnit)
-            : (v.sellerPrice !== undefined && v.sellerPrice !== null ? String(v.sellerPrice) : (v.price ? String(v.price) : ''));
+          const vPriceBasis = v.priceBasis || 'per_package';
+          const vSeller = v.sellerPrice !== undefined && v.sellerPrice !== null && v.sellerPrice !== ''
+            ? String(v.sellerPrice)
+            : (v.sellerPricePerProductUnit !== undefined && v.sellerPricePerProductUnit !== null && v.sellerPricePerProductUnit !== ''
+                ? String(v.sellerPricePerProductUnit)
+                : (v.price ? String(v.price) : (v.sellerPricePerBaseUnit !== undefined ? String(v.sellerPricePerBaseUnit) : '')));
           let variantMeas = (v.measurementBasis || v.measurementUnit || parsed.unit || 'KG').toUpperCase();
           if (variantMeas === 'BAG' || variantMeas === 'BOX') {
             variantMeas = 'KG';
@@ -522,13 +524,6 @@ const EditProduct = () => {
           const uSize = parseFloat(v.packetSizeVal || v.unitSize) || 1;
           const mUnit = (v.packetSizeUnit || v.measurementBasis || formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase();
           const pType = (v.packagingType || formData.packagingType || formData.unit || 'BAG').toUpperCase();
-          // Sync with base product seller price if this variant matches base packaging & unit size
-          if (uSize === (parseFloat(formData.unitSize) || 1) && pType === (formData.packagingType || formData.unit || 'BAG').toUpperCase()) {
-            const baseFormPrice = parseFloat(formData.sellerB2bPrice || formData.price) || 0;
-            if (baseFormPrice > 0) {
-              rawPrice = baseFormPrice;
-            }
-          }
 
           const pkgPrice = rawPrice;
           const basePrice = uSize > 0 ? Math.round((rawPrice / uSize) * 100) / 100 : rawPrice;

@@ -427,7 +427,7 @@ const AddProduct = () => {
       // Explicitly set wholesale pricing without commission addition
       data.append('sellerB2bPrice', sellerB2bVal);
       data.append('sellerPrice', sellerB2bVal);
-      data.append('sellerPricePerBaseUnit', sellerB2bVal);
+      data.append('sellerPricePerBaseUnit', unitSizeNum > 0 ? Math.round((sellerB2bVal / unitSizeNum) * 100) / 100 : sellerB2bVal);
       data.append('sellerPricePerProductUnit', sellerB2bVal);
       data.append('sellerUnitPrice', sellerB2bVal);
       data.append('b2bPrice', sellerB2bVal);
@@ -442,8 +442,8 @@ const AddProduct = () => {
       data.append('packagingType', (formData.packagingType || formData.unit || 'BAG').trim().toUpperCase());
       data.append('measurementBasis', (formData.measurementBasis || formData.measurementUnit || 'KG').trim().toUpperCase());
       data.append('measurementUnit', (formData.measurementBasis || formData.measurementUnit || 'KG').trim().toUpperCase());
-      data.append('priceBasis', 'per_unit');
-      data.append('isPackagePrice', false);
+      data.append('priceBasis', 'per_package');
+      data.append('isPackagePrice', true);
       const customUnitsToSave = Array.from(new Set(
         packagingOptions
           .filter(u => !DEFAULT_PACKAGING.includes(u) && u !== 'KG' && u !== 'LITRE' && u !== 'LTR')

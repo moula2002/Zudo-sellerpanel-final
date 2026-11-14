@@ -5,13 +5,22 @@ import { calculateB2bPricing } from '../utils/pricing';
 import { Package, Plus, Search, Filter, MoreVertical, Edit2, Trash2, Eye, X, IndianRupee, Percent } from 'lucide-react';
 import Layout from '../components/Layout';
 
-const ProductDetailModal = ({ product, onClose }) => {
-  if (!product) return null;
-
-  const gstRate = product.gstRate || product.gstPercent || 0;
-  const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
-  const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-  const rawBase = product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+// Helper to resolve the correct seller price for display in listing and details modal
+// Prioritizes B2B size variant price if variants exist, avoiding unit-size divisions or base price mismatch
+export const getDisplaySellerPrice = (product) => {
+  if (!product) return 0;
+  if (Array.isArray(product.b2b) && product.b2b.length > 0) {
+    const firstB2b = product.b2b[0];
+    const vSeller = firstB2b.sellerPrice !== undefined && firstB2b.sellerPrice !== null && Number(firstB2b.sellerPrice) > 0
+      ? Number(firstB2b.sellerPrice)
+      : (firstB2b.sellerPricePerProductUnit !== undefined && firstB2b.sellerPricePerProductUnit !== null && Number(firstB2b.sellerPricePerProductUnit) > 0
+          ? Number(firstB2b.sellerPricePerProductUnit)
+          : (firstB2b.price !== undefined && firstB2b.price !== null && Number(firstB2b.price) > 0
+              ? Number(firstB2b.price)
+              : null));
+    if (vSeller !== null) return vSeller;
+  }
+  return product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
     ? Number(product.sellerPrice)
     : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
         ? Number(product.sellerUnitPrice)
@@ -22,6 +31,15 @@ const ProductDetailModal = ({ product, onClose }) => {
                 : (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
                     ? Number(product.sellerPricePerBaseUnit)
                     : Number(product.price || 0)))));
+};
+
+const ProductDetailModal = ({ product, onClose }) => {
+  if (!product) return null;
+
+  const gstRate = product.gstRate || product.gstPercent || 0;
+  const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
+  const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
+  const rawBase = getDisplaySellerPrice(product);
 
   const pricing = calculateB2bPricing({
     basePrice: rawBase,
@@ -435,20 +453,8 @@ const Products = () => {
               const displayGstRate = product.gstRate || product.gstPercent || 0;
               const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
               const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-              // Seller Price = Base Price (never multiplied by unit size)
-              const baseSellerPrice = product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
-                ? Number(product.sellerPrice)
-                : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
-                    ? Number(product.sellerUnitPrice)
-                    : (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && Number(product.sellerPricePerProductUnit) > 0
-                        ? Number(product.sellerPricePerProductUnit)
-                        : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
-                            ? Number(product.sellerB2bPrice)
-                            : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined && Number(product.b2b[0].sellerPrice) > 0
-                                ? Number(product.b2b[0].sellerPrice)
-                                : (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
-                                    ? Number(product.sellerPricePerBaseUnit)
-                                    : Number(product.price || 0))))));
+              // Seller Price reflects correct B2B variant price or base price
+              const baseSellerPrice = getDisplaySellerPrice(product);
 
               // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
               const baseGstRate = parseFloat(displayGstRate) || 0;
@@ -589,20 +595,8 @@ const Products = () => {
           const displayGstRate = product.gstRate || product.gstPercent || 0;
           const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
           const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-          // Seller Price = Base Price (never multiplied by unit size)
-          const baseSellerPrice = product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
-            ? Number(product.sellerPrice)
-            : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
-                ? Number(product.sellerUnitPrice)
-                : (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && Number(product.sellerPricePerProductUnit) > 0
-                    ? Number(product.sellerPricePerProductUnit)
-                    : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
-                        ? Number(product.sellerB2bPrice)
-                        : (product.b2b && product.b2b.length > 0 && product.b2b[0].sellerPrice !== undefined && Number(product.b2b[0].sellerPrice) > 0
-                            ? Number(product.b2b[0].sellerPrice)
-                            : (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
-                                ? Number(product.sellerPricePerBaseUnit)
-                                : Number(product.price || 0))))));
+          // Seller Price reflects correct B2B variant price or base price
+          const baseSellerPrice = getDisplaySellerPrice(product);
 
           // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
           const baseGstRate = parseFloat(displayGstRate) || 0;
