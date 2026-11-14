@@ -44,24 +44,88 @@ export const getDisplaySellerPrice = (product) => {
   return rawPrice;
 };
 
+export const getProductPricingInfo = (product) => {
+  if (!product) return null;
+
+  // Determine base unit size (e.g. 200 for 200 LTR bag/drum)
+  let unitSize = parseFloat(product.unitSize);
+  if (!unitSize || unitSize <= 1) {
+    const firstVar = (product.b2b && product.b2b[0]) || (product.b2c && product.b2c[0]) || (product.variants && product.variants[0]);
+    if (firstVar) {
+      const vSize = parseFloat(firstVar.unitSize || firstVar.sizeValue);
+      if (vSize && vSize > 1) {
+        unitSize = vSize;
+      } else if (firstVar.packetSize) {
+        const m = String(firstVar.packetSize).match(/([0-9.]+)/);
+        if (m && parseFloat(m[1]) > 1) {
+          unitSize = parseFloat(m[1]);
+        }
+      }
+    }
+    if (!unitSize || unitSize <= 1) {
+      const match = String(product.name || '').match(/([0-9.]+)\s*(kg|g|ltr|pcs|gm|kgs|ton|ml|tin|bag|box)/i);
+      if (match && parseFloat(match[1]) > 1) {
+        unitSize = parseFloat(match[1]);
+      }
+    }
+  }
+  if (!unitSize || unitSize <= 0) unitSize = 1;
+
+  // Measurement basis & packaging
+  const rawUnit = (product.unit || 'BAG').toUpperCase();
+  const rawMeas = (product.measurementBasis || product.measurementUnit || 'KG').toUpperCase();
+  const packagingType = (product.packagingType || product.unit || 'BAG').toUpperCase();
+  const measurementBasis = (rawMeas === 'BAG' || rawMeas === 'BOX') ? 'KG' : rawMeas;
+
+  // Resolve Seller Base Price / Unit (e.g. ₹1,000 / LTR)
+  const sellerBasePrice = getDisplaySellerPrice(product);
+
+  // 1. Package Base Price = Seller Base Price × Product Unit Size
+  const packageBasePrice = parseFloat((sellerBasePrice * unitSize).toFixed(2));
+
+  // 2. GST Amount = Package Base Price × GST Percentage / 100
+  const gstPercent = parseFloat(product.gstRate || product.gstPercent || 0) || 0;
+  const isGstInclusive = Boolean(product.isGstInclusive);
+
+  let gstAmount = 0;
+  let customerFinalPrice = packageBasePrice;
+
+  if (gstPercent > 0) {
+    if (isGstInclusive) {
+      const baseBeforeTax = packageBasePrice / (1 + gstPercent / 100);
+      gstAmount = parseFloat((packageBasePrice - baseBeforeTax).toFixed(2));
+      customerFinalPrice = packageBasePrice;
+    } else {
+      gstAmount = parseFloat((packageBasePrice * (gstPercent / 100)).toFixed(2));
+      customerFinalPrice = parseFloat((packageBasePrice + gstAmount).toFixed(2));
+    }
+  }
+
+  return {
+    packagingType,
+    measurementBasis,
+    unitSize,
+    sellerBasePrice,
+    packageBasePrice,
+    gstPercent,
+    gstAmount,
+    customerFinalPrice,
+    isGstInclusive
+  };
+};
+
 const ProductDetailModal = ({ product, onClose }) => {
   if (!product) return null;
 
-  const gstRate = product.gstRate || product.gstPercent || 0;
-  const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
-  const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-  const rawBase = getDisplaySellerPrice(product);
-
-  const pricing = calculateB2bPricing({
-    basePrice: rawBase,
-    unitSize: uSize,
-    gstRate: gstRate,
-    quantity: 1
-  });
-
-  const sellerPrice = rawBase;
-  const customerGstAmount = parseFloat(((sellerPrice * parseFloat(gstRate || 0)) / 100).toFixed(2));
-  const customerTotalWithGst = parseFloat((sellerPrice + customerGstAmount).toFixed(2));
+  const info = getProductPricingInfo(product);
+  const sellerBasePrice = info.sellerBasePrice;
+  const packageBasePrice = info.packageBasePrice;
+  const gstPercent = info.gstPercent;
+  const gstAmount = info.gstAmount;
+  const customerFinalPrice = info.customerFinalPrice;
+  const unitSize = info.unitSize;
+  const packagingType = info.packagingType;
+  const measurementBasis = info.measurementBasis;
 
   return (
     <div style={{
@@ -173,33 +237,56 @@ const ProductDetailModal = ({ product, onClose }) => {
               {product.sku && <div style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 500 }}>PRODUCT SKU: <span style={{ color: 'var(--text-main)' }}>{product.sku}</span></div>}
             </div>
 
-            {/* Price Breakdown Grid */}
+            {/* Compact Numbered Pricing Breakdown Layout matching Admin Panel Style (Without Admin Commission) */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              fontSize: '12px',
+              background: 'rgba(255, 255, 255, 0.02)',
+              padding: '16px 18px',
+              borderRadius: '16px',
+              border: '1px solid var(--glass-border)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)' }}>1. Product Unit Size:</span>
+                <strong style={{ color: 'var(--text-main)' }}>1 {packagingType} = {unitSize} {measurementBasis}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)' }}>2. Seller Base Price / Unit:</span>
+                <strong style={{ color: 'var(--text-main)' }}>₹{sellerBasePrice.toFixed(2)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px dashed var(--glass-border)', paddingTop: '6px', marginTop: '2px' }}>
+                <span style={{ color: 'var(--text-dim)', fontWeight: 600 }}>3. Package Base Price:</span>
+                <strong style={{ color: 'var(--text-main)' }}>₹{packageBasePrice.toFixed(2)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)' }}>4. GST Percentage:</span>
+                <span style={{ color: '#f59e0b', fontWeight: 600 }}>{gstPercent}%</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ color: 'var(--text-dim)' }}>5. GST Amount:</span>
+                <span style={{ color: '#f59e0b', fontWeight: 600 }}>₹{gstAmount.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '6px', marginTop: '2px' }}>
+                <span style={{ fontWeight: 700, color: '#10b981', fontSize: '13px' }}>6. Customer Final Price:</span>
+                <strong style={{ color: '#10b981', fontSize: '15px' }}>₹{customerFinalPrice.toFixed(2)}</strong>
+              </div>
+            </div>
+
+            {/* Quick Metrics Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
               <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>SELLER PRICE (NET)</div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-main)' }}>₹{sellerPrice}</div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Your Payout</div>
-              </div>
-
-              <div style={{ padding: '14px', background: 'rgba(34, 197, 94, 0.08)', borderRadius: '16px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: 700, marginBottom: '4px' }}>CUSTOMER PRICE (INCL. GST)</div>
-                <div style={{ fontSize: '20px', fontWeight: 900, color: '#22c55e' }}>₹{customerTotalWithGst.toFixed(2)}</div>
-                <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
-                  Base: ₹{sellerPrice} + {gstRate}% GST
-                </div>
-              </div>
-
-              <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>UNIT TYPE</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase' }}>
-                  {product.unit || 'PCS'}
+                <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase' }}>
+                  {packagingType}
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>Standard Unit</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>Standard Packaging</div>
               </div>
 
               <div style={{ padding: '14px', background: 'var(--glass-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700, marginBottom: '4px' }}>MAX ORDER QTY</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-main)' }}>
                   {product.moq || 1}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }}>Maximum units</div>
@@ -212,13 +299,17 @@ const ProductDetailModal = ({ product, onClose }) => {
                 <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>B2B SIZE VARIANTS</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {product.b2b.map((v, i) => {
+                    const vUnitSize = parseFloat(v.unitSize || v.packetSizeVal) || 1;
                     const vSeller = parseFloat(v.sellerPrice !== undefined && v.sellerPrice !== null ? v.sellerPrice : v.price) || 0;
-                    const vTotal = vSeller + (vSeller * gstRate) / 100;
+                    const vPkgBase = vSeller * vUnitSize;
+                    const vGst = parseFloat((vPkgBase * (gstPercent / 100)).toFixed(2));
+                    const vTotal = parseFloat((vPkgBase + vGst).toFixed(2));
                     return (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', fontSize: '13px' }}>
                         <span style={{ fontWeight: 600 }}>{v.packetSize}</span>
                         <span style={{ color: '#94a3b8' }}>Base: ₹{vSeller}</span>
-                        <span style={{ color: '#22c55e', fontWeight: 700 }}>Incl. GST: ₹{vTotal.toFixed(2)}</span>
+                        <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Package: ₹{vPkgBase.toFixed(2)}</span>
+                        <span style={{ color: '#10b981', fontWeight: 700 }}>Final: ₹{vTotal.toFixed(2)}</span>
                         <span style={{ color: '#64748b' }}>Stock: {v.stock}</span>
                       </div>
                     );
@@ -440,7 +531,7 @@ const Products = () => {
             <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--glass-bg)' }}>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>PRODUCT</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>CATEGORY</th>
-              <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>SELLER PRICE</th>
+              <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>BASE PRICE</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>FINAL PRICE</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>UNIT TYPE</th>
               <th style={{ padding: '18px 20px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700 }}>STOCK</th>
@@ -461,16 +552,7 @@ const Products = () => {
                 </td>
               </tr>
             ) : filteredProducts.map((product) => {
-              const displayGstRate = product.gstRate || product.gstPercent || 0;
-              const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
-              const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-              // Seller Price reflects correct B2B variant price or base price
-              const baseSellerPrice = getDisplaySellerPrice(product);
-
-              // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
-              const baseGstRate = parseFloat(displayGstRate) || 0;
-              const baseGstAmount = parseFloat(((baseSellerPrice * baseGstRate) / 100).toFixed(2));
-              const baseCustomerPrice = parseFloat((baseSellerPrice + baseGstAmount).toFixed(2));
+              const pricing = getProductPricingInfo(product);
 
               return (
                 <tr key={product._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
@@ -495,35 +577,26 @@ const Products = () => {
                     <div style={{ fontSize: '11px', color: '#64748b' }}>{product.subCategoryId?.name || product.subCategory || ''}</div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-main)' }}>
-                      ₹{baseSellerPrice}
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                      ₹{pricing.sellerBasePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>₹{baseCustomerPrice.toFixed(2)}</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981' }}>
+                      ₹{pricing.customerFinalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '2px' }}>
-                      {displayGstRate}% GST
+                      {pricing.gstPercent}% GST
                     </div>
                   </td>
                   <td style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <span style={{ 
-                        fontSize: '12px', 
-                        fontWeight: 700, 
-                        color: 'var(--text-main)', 
-                        background: 'rgba(99, 102, 241, 0.1)', 
-                        padding: '4px 8px', 
-                        borderRadius: '8px', 
-                        border: '1px solid rgba(99, 102, 241, 0.2)',
-                        display: 'inline-block',
-                        textTransform: 'uppercase'
-                      }}>
-                        {product.packagingType || product.unit || 'BAG'}
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600 }}>
-                        1 {product.packagingType || product.unit || 'BAG'} = {product.unitSize || 1} {(product.measurementBasis || product.measurementUnit || 'KG').toUpperCase()}
-                      </span>
-                    </div>
+                    <span style={{ 
+                      fontSize: '12px', 
+                      fontWeight: 600, 
+                      color: 'var(--text-main)' 
+                    }}>
+                      1 {pricing.packagingType} = {pricing.unitSize} {pricing.measurementBasis}
+                    </span>
                   </td>
                   <td style={{ padding: '16px 20px', fontSize: '13px' }}>
                     {(() => {
@@ -603,40 +676,22 @@ const Products = () => {
             No products found.
           </div>
         ) : filteredProducts.map((product) => {
-          const displayGstRate = product.gstRate || product.gstPercent || 0;
-          const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
-          const uSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
-          // Seller Price reflects correct B2B variant price or base price
-          const baseSellerPrice = getDisplaySellerPrice(product);
-
-          // Seller Panel Customer Price = Base Price + GST (Admin Commission is NOT included)
-          const baseGstRate = parseFloat(displayGstRate) || 0;
-          const baseGstAmount = parseFloat(((baseSellerPrice * baseGstRate) / 100).toFixed(2));
-          const baseCustomerPrice = parseFloat((baseSellerPrice + baseGstAmount).toFixed(2));
+          const pricing = getProductPricingInfo(product);
 
           return (
-            <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', gap: '16px' }}>
-              <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', overflow: 'hidden', flexShrink: 0 }}>
-                <img 
-                  src={getImageUrl(product.imageUrl)} 
-                  alt="" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/80x80?text=No+Image'; }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '2px' }}>{product.name}</div>
-                <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>{product.categoryId?.name}</div>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--text-main)', fontWeight: 600 }}>Seller: <strong style={{ fontWeight: 800 }}>₹{baseSellerPrice}</strong></span>
-                  <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 800 }}>Customer: ₹{baseCustomerPrice.toFixed(2)}</span>
-                  <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--text-main)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase' }}>
-                    {product.packagingType || product.unit || 'BOX'}
-                  </span>
+            <div key={product._id} className="glass-card" style={{ padding: '16px', borderRadius: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '14px' }}>
+                <div style={{ width: '70px', height: '70px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', overflow: 'hidden', flexShrink: 0 }}>
+                  <img 
+                    src={getImageUrl(product.imageUrl)} 
+                    alt="" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/80x80?text=No+Image'; }}
+                  />
                 </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '2px', wordBreak: 'break-word' }}>{product.name}</div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px' }}>{product.categoryId?.name}</div>
                   {(() => {
                     const hasVariants = product.b2b && product.b2b.length > 0;
                     const effectiveStock = hasVariants
@@ -649,11 +704,44 @@ const Products = () => {
                     );
                   })()}
                 </div>
+              </div>
 
-                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                  <button onClick={() => setSelectedProduct(product)} style={{ flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', border: 'none', color: '#6366f1', fontSize: '12px', fontWeight: 600 }}>View</button>
-                  <button onClick={() => navigate(`/products/edit/${product._id}`)} style={{ flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', fontSize: '12px', fontWeight: 600 }}>Edit</button>
+              {/* Simple Price and Unit Row */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                borderRadius: '12px',
+                border: '1px solid var(--glass-border)',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700 }}>BASE PRICE</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    ₹{pricing.sellerBasePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
                 </div>
+                <div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 700 }}>FINAL PRICE</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#10b981' }}>
+                    ₹{pricing.customerFinalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 500, marginTop: '1px' }}>
+                    {pricing.gstPercent}% GST
+                  </div>
+                </div>
+                <div style={{ width: '100%', fontSize: '11px', color: 'var(--text-dim)', borderTop: '1px dashed var(--glass-border)', paddingTop: '6px', marginTop: '2px' }}>
+                  Unit: <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>1 {pricing.packagingType} = {pricing.unitSize} {pricing.measurementBasis}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setSelectedProduct(product)} style={{ flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', border: 'none', color: '#6366f1', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>View</button>
+                <button onClick={() => navigate(`/products/edit/${product._id}`)} style={{ flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Edit</button>
+                <button onClick={() => openDeleteModal(product._id, product.name)} style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.05)', border: 'none', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Delete</button>
               </div>
             </div>
           );

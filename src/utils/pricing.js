@@ -66,13 +66,12 @@ export function calculateCustomerPrice(sellerPrice, commissionType = 'flat', com
 }
 
 /**
- * Dynamic Unit-Based Admin Commission Calculation for B2B Pricing:
+ * Dynamic Unit-Based Calculation for B2B Pricing in Seller Panel:
  * Formula:
- * - totalCommission = unitSize * adminCommissionPerUnit
- * - customerBasePrice = basePrice + totalCommission
- * - sellerPricePerPackage = basePrice (NOT multiplied by unitSize)
- * - gstAmount = customerBasePrice * (gstRate / 100)
- * - customerPricePerPackage = customerBasePrice + gstAmount
+ * - packageBasePrice = sellerBasePrice * unitSize
+ * - gstAmount = packageBasePrice * (gstRate / 100)
+ * - customerFinalPrice = packageBasePrice + gstAmount
+ * (Admin Commission is strictly excluded from Seller Panel)
  */
 export function calculateB2bPricing({
   basePrice = 0,
@@ -88,41 +87,47 @@ export function calculateB2bPricing({
   const gst = parseFloat(gstRate) || 0;
   const qty = Number(quantity) > 0 ? Number(quantity) : 1;
 
-  // Seller's base price is NOT multiplied by unit size
-  const sellerPricePerPackage = parseFloat(bPrice.toFixed(2));
-  const totalSellerPrice = parseFloat((sellerPricePerPackage * qty).toFixed(2));
+  // Package Base Price = Seller Base Price × Unit Size
+  const packageBasePrice = parseFloat((bPrice * uSize).toFixed(2));
+  const totalPackageBasePrice = parseFloat((packageBasePrice * qty).toFixed(2));
 
-  // Commission = unitSize * adminCommissionPerUnit
+  // GST on Package Base Price
+  const gstAmountPerPackage = parseFloat((packageBasePrice * (gst / 100)).toFixed(2));
+  const totalGstAmount = parseFloat((totalPackageBasePrice * (gst / 100)).toFixed(2));
+
+  // Customer Final Price = Package Base Price + GST Amount
+  const customerPricePerPackage = parseFloat((packageBasePrice + gstAmountPerPackage).toFixed(2));
+  const totalCustomerPrice = parseFloat((totalPackageBasePrice + totalGstAmount).toFixed(2));
+
+  // Legacy field support for admin commission calculations if called elsewhere
   const totalCommissionPerPackage = commissionType === 'percentage'
-    ? parseFloat(((sellerPricePerPackage * commRate) / 100).toFixed(2))
+    ? parseFloat(((packageBasePrice * commRate) / 100).toFixed(2))
     : parseFloat((uSize * commRate).toFixed(2));
   const totalCommission = parseFloat((totalCommissionPerPackage * qty).toFixed(2));
-
-  // Customer Base Price = Seller Base Price + Total Commission
-  const customerBasePricePerPackage = parseFloat((sellerPricePerPackage + totalCommissionPerPackage).toFixed(2));
-  const totalCustomerBasePrice = parseFloat((customerBasePricePerPackage * qty).toFixed(2));
-
-  // Step 2: Customer Price for Seller Panel Display (Base Price + GST only, Admin Commission is NOT included)
-  const gstAmountPerPackage = parseFloat((sellerPricePerPackage * (gst / 100)).toFixed(2));
-  const totalGstAmount = parseFloat((totalSellerPrice * (gst / 100)).toFixed(2));
-  const customerPricePerPackage = parseFloat((sellerPricePerPackage + gstAmountPerPackage).toFixed(2));
-  const totalCustomerPrice = parseFloat((totalSellerPrice + totalGstAmount).toFixed(2));
+  const customerBasePricePerPackage = parseFloat((packageBasePrice + totalCommissionPerPackage).toFixed(2));
 
   return {
     basePrice: bPrice,
     unitSize: uSize,
+    packageBasePrice,
+    totalPackageBasePrice,
     adminCommissionPerUnit: commRate,
     totalCommissionPerPackage,
     totalCommission,
     customerBasePricePerPackage,
     gstRate: gst,
     quantity: qty,
-    sellerPricePerPackage,
-    totalSellerPrice,
+    sellerPricePerPackage: packageBasePrice,
+    totalSellerPrice: totalPackageBasePrice,
     gstAmountPerPackage,
     totalGstAmount,
     customerPricePerPackage,
-    totalCustomerPrice
+    totalCustomerPrice,
+    // Per-unit breakdown values
+    sellerBasePricePerUnit: bPrice,
+    packagePrice: packageBasePrice,
+    gstAmount: gstAmountPerPackage,
+    customerFinalPrice: customerPricePerPackage
   };
 }
 
