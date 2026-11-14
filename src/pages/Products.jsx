@@ -5,32 +5,43 @@ import { calculateB2bPricing } from '../utils/pricing';
 import { Package, Plus, Search, Filter, MoreVertical, Edit2, Trash2, Eye, X, IndianRupee, Percent } from 'lucide-react';
 import Layout from '../components/Layout';
 
-// Helper to resolve the correct seller price for display in listing and details modal
-// Prioritizes B2B size variant price if variants exist, avoiding unit-size divisions or base price mismatch
+// Helper to resolve the original Base Price (per measurement basis, e.g. per KG) for display in listing and details modal
+// Retrieves original saved Base Price (sellerPricePerBaseUnit), not the calculated package price or B2B variant payout
 export const getDisplaySellerPrice = (product) => {
   if (!product) return 0;
+  const unitSize = parseFloat(product.unitSize) > 0 ? parseFloat(product.unitSize) : 1;
+
+  // 1. Check primary sellerPricePerBaseUnit
+  if (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0) {
+    return Number(product.sellerPricePerBaseUnit);
+  }
+
+  // 2. If variants exist with sellerPricePerBaseUnit
   if (Array.isArray(product.b2b) && product.b2b.length > 0) {
     const firstB2b = product.b2b[0];
-    const vSeller = firstB2b.sellerPrice !== undefined && firstB2b.sellerPrice !== null && Number(firstB2b.sellerPrice) > 0
-      ? Number(firstB2b.sellerPrice)
-      : (firstB2b.sellerPricePerProductUnit !== undefined && firstB2b.sellerPricePerProductUnit !== null && Number(firstB2b.sellerPricePerProductUnit) > 0
-          ? Number(firstB2b.sellerPricePerProductUnit)
-          : (firstB2b.price !== undefined && firstB2b.price !== null && Number(firstB2b.price) > 0
-              ? Number(firstB2b.price)
-              : null));
-    if (vSeller !== null) return vSeller;
+    if (firstB2b.sellerPricePerBaseUnit !== undefined && firstB2b.sellerPricePerBaseUnit !== null && Number(firstB2b.sellerPricePerBaseUnit) > 0) {
+      return Number(firstB2b.sellerPricePerBaseUnit);
+    }
   }
-  return product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
-    ? Number(product.sellerPrice)
-    : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
-        ? Number(product.sellerUnitPrice)
-        : (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && Number(product.sellerPricePerProductUnit) > 0
-            ? Number(product.sellerPricePerProductUnit)
-            : (product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
-                ? Number(product.sellerB2bPrice)
-                : (product.sellerPricePerBaseUnit !== undefined && product.sellerPricePerBaseUnit !== null && Number(product.sellerPricePerBaseUnit) > 0
-                    ? Number(product.sellerPricePerBaseUnit)
-                    : Number(product.price || 0)))));
+
+  // 3. Fallback resolution: if sellerB2bPrice / sellerPrice exists
+  const rawPrice = product.sellerB2bPrice !== undefined && product.sellerB2bPrice !== null && Number(product.sellerB2bPrice) > 0
+    ? Number(product.sellerB2bPrice)
+    : (product.sellerPrice !== undefined && product.sellerPrice !== null && Number(product.sellerPrice) > 0
+        ? Number(product.sellerPrice)
+        : (product.sellerUnitPrice !== undefined && product.sellerUnitPrice !== null && Number(product.sellerUnitPrice) > 0
+            ? Number(product.sellerUnitPrice)
+            : (product.sellerPricePerProductUnit !== undefined && product.sellerPricePerProductUnit !== null && Number(product.sellerPricePerProductUnit) > 0
+                ? Number(product.sellerPricePerProductUnit)
+                : Number(product.b2bPrice || product.price || 0))));
+
+  // If priceBasis is per_package or isPackagePrice is true and unitSize > 1, convert package price back to base price
+  const isPackage = product.priceBasis === 'per_package' || Boolean(product.isPackagePrice);
+  if (isPackage && unitSize > 1 && rawPrice > 0) {
+    return Math.round((rawPrice / unitSize) * 100) / 100;
+  }
+
+  return rawPrice;
 };
 
 const ProductDetailModal = ({ product, onClose }) => {
