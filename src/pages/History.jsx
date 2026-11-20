@@ -703,6 +703,7 @@ const filterLegacyHistory = (sourceRows, { search, startDate, endDate, status, a
 const History = () => {
   const [rows, setRows] = useState([]);
   const [legacyRows, setLegacyRows] = useState(null);
+  const [sellerOrdersMap, setSellerOrdersMap] = useState(new Map());
   const [counts, setCounts] = useState({});
   const [statuses, setStatuses] = useState([]);
   const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 0, totalRecords: 0, limit: 20 });
@@ -720,6 +721,65 @@ const History = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const startDateRef = useRef(null);
+
+  const getResolvedItemPricing = (item, orderId, referenceId, orderTotal) => {
+    if (!item) return { unitPrice: 0, amount: 0 };
+    const qty = Number(item.quantity) || 1;
+
+    // 1. Look up canonical order from sellerOrdersMap (from /sellers/orders)
+    const cleanRef = referenceId ? String(referenceId).replace('#', '').replace(/^0+/, '') : '';
+    const canonicalOrder = (orderId && sellerOrdersMap.get(String(orderId))) ||
+                           (referenceId && sellerOrdersMap.get(String(referenceId))) ||
+                           (cleanRef && sellerOrdersMap.get(cleanRef));
+
+    if (canonicalOrder && Array.isArray(canonicalOrder.items) && canonicalOrder.items.length > 0) {
+      const matched = canonicalOrder.items.find(it =>
+        (it.name && item.name && it.name.trim().toLowerCase() === item.name.trim().toLowerCase()) ||
+        (it.productId && item.productId && String(it.productId) === String(item.productId))
+      ) || (canonicalOrder.items.length === 1 ? canonicalOrder.items[0] : null);
+
+      if (matched) {
+        const normal = matched.normalPrice !== undefined && matched.normalPrice !== null
+          ? Number(matched.normalPrice)
+          : (matched.netPrice !== undefined && matched.netPrice !== null ? Number(matched.netPrice) : null);
+
+        const lineTotal = matched.totalSellerAmount !== undefined && matched.totalSellerAmount !== null && Number(matched.totalSellerAmount) > 0
+          ? Number(matched.totalSellerAmount)
+          : (normal !== null ? normal * qty : null);
+
+        if (normal !== null || lineTotal !== null) {
+          const finalLineTotal = lineTotal !== null ? lineTotal : (normal * qty);
+          const finalUnit = normal !== null ? normal : (finalLineTotal / qty);
+          return { unitPrice: finalUnit, amount: finalLineTotal };
+        }
+      }
+    }
+
+    // 2. Check item's own seller payout properties
+    if (item.normalPrice !== undefined && item.normalPrice !== null && Number(item.normalPrice) > 0) {
+      const normal = Number(item.normalPrice);
+      return { unitPrice: normal, amount: normal * qty };
+    }
+    if (item.netPrice !== undefined && item.netPrice !== null && Number(item.netPrice) > 0) {
+      const net = Number(item.netPrice);
+      return { unitPrice: net, amount: net * qty };
+    }
+    if (item.totalSellerAmount !== undefined && item.totalSellerAmount !== null && Number(item.totalSellerAmount) > 0) {
+      const total = Number(item.totalSellerAmount);
+      return { unitPrice: total / qty, amount: total };
+    }
+
+    // 3. Fallback: if unitPrice or amount exceeds orderTotal (because of platform commission)
+    const currentUnit = Number(item.unitPrice ?? item.price ?? 0);
+    const currentAmount = Number(item.amount ?? (currentUnit * qty));
+    const maxTotal = Number(orderTotal) || 0;
+
+    if (maxTotal > 0 && currentAmount > maxTotal) {
+      return { unitPrice: maxTotal / qty, amount: maxTotal };
+    }
+
+    return { unitPrice: currentUnit, amount: currentAmount };
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -766,10 +826,22 @@ const History = () => {
         ? sellerResponse.data
         : storedSeller;
       if (!idString(resolvedSeller)) throw new Error('Seller profile could not be verified.');
+      const ordersList = getList(ordersResponse, 'Orders');
+      const ordersLookup = new Map();
+      ordersList.forEach(order => {
+        if (order._id) ordersLookup.set(String(order._id), order);
+        if (order.orderNumber !== undefined && order.orderNumber !== null) {
+          ordersLookup.set(String(order.orderNumber), order);
+          ordersLookup.set(Number(order.orderNumber), order);
+          ordersLookup.set(`#${String(order.orderNumber).padStart(5, '0')}`, order);
+        }
+        if (order.orderRef) ordersLookup.set(String(order.orderRef), order);
+      });
+      setSellerOrdersMap(ordersLookup);
       return buildLegacyHistory({
         seller: resolvedSeller,
         products: getList(productsResponse, 'Products'),
-        orders: getList(ordersResponse, 'Orders'),
+        orders: ordersList,
         invoices: getList(invoicesResponse, 'Invoices'),
         pickups: getList(pickupsResponse, 'Pickups'),
         returns: getList(returnsResponse, 'Returns')
@@ -803,7 +875,19 @@ const History = () => {
           api.get('/sellers/orders', { signal: controller.signal }).catch(() => ({ data: [] }))
         ]);
         const data = historyRes.data;
-        const orderTotalsMap = buildOrderTotalsMap(Array.isArray(ordersRes.data) ? ordersRes.data : []);
+        const ordersList = Array.isArray(ordersRes.data) ? ordersRes.data : [];
+        const orderTotalsMap = buildOrderTotalsMap(ordersList);
+        const ordersLookup = new Map();
+        ordersList.forEach(order => {
+          if (order._id) ordersLookup.set(String(order._id), order);
+          if (order.orderNumber !== undefined && order.orderNumber !== null) {
+            ordersLookup.set(String(order.orderNumber), order);
+            ordersLookup.set(Number(order.orderNumber), order);
+            ordersLookup.set(`#${String(order.orderNumber).padStart(5, '0')}`, order);
+          }
+          if (order.orderRef) ordersLookup.set(String(order.orderRef), order);
+        });
+        setSellerOrdersMap(ordersLookup);
         const incoming = Array.isArray(data.data) ? data.data : [];
         const consolidatedData = consolidateClientRows(incoming, orderTotalsMap);
         setRows(consolidatedData);
@@ -856,11 +940,33 @@ const History = () => {
           signal: controller.signal
         });
         const detailsPayload = data.data;
-        if (detailsPayload && selected.amount !== null && selected.amount !== undefined) {
-          if (detailsPayload.activity) detailsPayload.activity.amount = selected.amount;
-          if (detailsPayload.details) {
-            detailsPayload.details.orderTotal = selected.amount;
-            detailsPayload.details.paymentAmount = selected.amount;
+        if (detailsPayload) {
+          if (selected.amount !== null && selected.amount !== undefined) {
+            if (detailsPayload.activity) detailsPayload.activity.amount = selected.amount;
+            if (detailsPayload.details) {
+              detailsPayload.details.orderTotal = selected.amount;
+              detailsPayload.details.paymentAmount = selected.amount;
+            }
+          }
+          const orderTotal = selected.amount ?? detailsPayload.details?.orderTotal;
+          const orderId = selected.orderId ?? detailsPayload.activity?.orderId;
+          const referenceId = selected.referenceId ?? detailsPayload.activity?.referenceId;
+          const normalizeItems = (items) => (items || []).map(it => {
+            const pricing = getResolvedItemPricing(it, orderId, referenceId, orderTotal);
+            return {
+              ...it,
+              unitPrice: pricing.unitPrice,
+              amount: pricing.amount
+            };
+          });
+          if (Array.isArray(detailsPayload.details?.items)) {
+            detailsPayload.details.items = normalizeItems(detailsPayload.details.items);
+          }
+          if (Array.isArray(detailsPayload.details?.order?.items)) {
+            detailsPayload.details.order.items = normalizeItems(detailsPayload.details.order.items);
+          }
+          if (Array.isArray(detailsPayload.details?.returnItems)) {
+            detailsPayload.details.returnItems = normalizeItems(detailsPayload.details.returnItems);
           }
         }
         setDetailData(detailsPayload);
@@ -1406,25 +1512,33 @@ const History = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {(details.returnItems || details.items || details.order?.items || selected?.items || []).map((item, index) => (
-                        <tr key={`${item.name || 'item'}-${index}`} style={{ borderTop: '1px solid var(--border-color)' }}>
-                          <td style={{ padding: '12px 14px' }}>
-                            <div style={{ fontWeight: 650 }}>{safeText(item.name)}</div>
-                            {(item.unit || item.measurement) && (
-                              <small style={{ color: 'var(--text-dim)' }}>{[item.measurement, item.unit].filter(Boolean).join(' · ')}</small>
-                            )}
-                          </td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 600 }}>
-                            {safeText(item.quantity)}
-                          </td>
-                          <td style={{ padding: '12px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>
-                            {item.unitPrice ? formatAmount(item.unitPrice) : '—'}
-                          </td>
-                          <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700 }}>
-                            {formatAmount(item.amount)}
-                          </td>
-                        </tr>
-                      ))}
+                      {(details.returnItems || details.items || details.order?.items || selected?.items || []).map((item, index) => {
+                        const pricing = getResolvedItemPricing(
+                          item,
+                          selected?.orderId,
+                          selected?.referenceId,
+                          selected?.amount ?? selectedActivity?.amount
+                        );
+                        return (
+                          <tr key={`${item.name || 'item'}-${index}`} style={{ borderTop: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div style={{ fontWeight: 650 }}>{safeText(item.name)}</div>
+                              {(item.unit || item.measurement) && (
+                                <small style={{ color: 'var(--text-dim)' }}>{[item.measurement, item.unit].filter(Boolean).join(' · ')}</small>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 600 }}>
+                              {safeText(item.quantity)}
+                            </td>
+                            <td style={{ padding: '12px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>
+                              {pricing.unitPrice ? formatAmount(pricing.unitPrice) : '—'}
+                            </td>
+                            <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700 }}>
+                              {formatAmount(pricing.amount)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
