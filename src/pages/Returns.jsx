@@ -3,37 +3,38 @@ import api, { getImageUrl } from '../utils/api';
 import { RefreshCcw, Search, User, MapPin, Package, AlertCircle, Calendar, ExternalLink, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatOrderNumber } from '../utils/orderFormat';
+import { getOrderStatusStyle } from '../utils/statusColors';
 
 export const getReturnStatusConfig = (status) => {
   const s = String(status || '').trim().toLowerCase();
+  const config = getOrderStatusStyle(status || 'Return Requested');
 
   if (s.includes('approved')) {
     return {
-      bg: 'rgba(34, 197, 94, 0.14)',
-      color: '#15803d',
-      border: '1px solid rgba(34, 197, 94, 0.3)',
-      cardBg: 'rgba(34, 197, 94, 0.04)',
-      cardBorder: '#22c55e',
+      bg: config.bg,
+      color: config.color,
+      border: `1px solid ${config.border}`,
+      cardBg: 'rgba(22, 163, 74, 0.04)',
+      cardBorder: '#16a34a',
       label: 'RETURN APPROVED',
     };
   }
   if (s.includes('rejected')) {
     return {
-      bg: 'rgba(148, 163, 184, 0.18)',
-      color: '#475569',
-      border: '1px solid rgba(148, 163, 184, 0.35)',
-      cardBg: 'rgba(148, 163, 184, 0.05)',
-      cardBorder: '#94a3b8',
+      bg: config.bg,
+      color: config.color,
+      border: `1px solid ${config.border}`,
+      cardBg: 'rgba(100, 116, 139, 0.05)',
+      cardBorder: '#64748b',
       label: 'RETURN REJECTED',
     };
   }
-  // Default to RETURN REQUESTED (Orange / Amber background, dark orange text)
   return {
-    bg: 'rgba(245, 158, 11, 0.14)',
-    color: '#c2410c',
-    border: '1px solid rgba(245, 158, 11, 0.35)',
-    cardBg: 'rgba(245, 158, 11, 0.05)',
-    cardBorder: '#f59e0b',
+    bg: config.bg,
+    color: config.color,
+    border: `1px solid ${config.border}`,
+    cardBg: 'rgba(234, 88, 12, 0.05)',
+    cardBorder: '#ea580c',
     label: s ? status.toUpperCase() : 'RETURN REQUESTED',
   };
 };

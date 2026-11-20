@@ -8,37 +8,16 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatOrderNumber } from '../utils/orderFormat';
+import { getOrderStatusStyle } from '../utils/statusColors';
 
 const StatusBadge = ({ status }) => {
-  const configs = {
-    'Pending': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', icon: Clock },
-    'Packed': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', icon: CheckCircle },
-    'Picked Up': { bg: 'rgba(16, 185, 129, 0.1)', color: '#10b981', icon: Truck },
-    'Processing': { bg: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', icon: RefreshCcw },
-    'Shipped': { bg: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', icon: Truck },
-    'Delivered': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', icon: CheckCircle },
-    'Cancelled': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', icon: XCircle },
-    'Rejected by Seller': { bg: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', icon: XCircle },
-    'Return Requested': { bg: 'rgba(245, 158, 11, 0.14)', color: '#c2410c', icon: RefreshCcw },
-    'RETURN REQUESTED': { bg: 'rgba(245, 158, 11, 0.14)', color: '#c2410c', icon: RefreshCcw },
-    'Return Approved': { bg: 'rgba(34, 197, 94, 0.14)', color: '#15803d', icon: CheckCircle },
-    'RETURN APPROVED': { bg: 'rgba(34, 197, 94, 0.14)', color: '#15803d', icon: CheckCircle },
-    'Return Rejected': { bg: 'rgba(148, 163, 184, 0.18)', color: '#475569', icon: XCircle },
-    'RETURN REJECTED': { bg: 'rgba(148, 163, 184, 0.18)', color: '#475569', icon: XCircle },
-  };
-
-  const normalized = String(status || '').trim().toLowerCase();
-  let fallbackConfig = configs['Pending'];
-  if (normalized.includes('approved')) {
-    fallbackConfig = configs['RETURN APPROVED'];
-  } else if (normalized.includes('rejected')) {
-    fallbackConfig = configs['RETURN REJECTED'];
-  } else if (normalized.includes('requested') || normalized.includes('return')) {
-    fallbackConfig = configs['RETURN REQUESTED'];
-  }
-
-  const config = configs[status] || fallbackConfig;
-  const Icon = config.icon || Clock;
+  const config = getOrderStatusStyle(status);
+  const s = String(status || '').toLowerCase();
+  let Icon = Clock;
+  if (s.includes('delivered') || s.includes('completed') || s.includes('approved')) Icon = CheckCircle;
+  else if (s.includes('cancel') || s.includes('reject')) Icon = XCircle;
+  else if (s.includes('ship') || s.includes('picked') || s.includes('delivery')) Icon = Truck;
+  else if (s.includes('return') || s.includes('process')) Icon = RefreshCcw;
 
   return (
     <span style={{
@@ -51,7 +30,7 @@ const StatusBadge = ({ status }) => {
       fontWeight: 700,
       background: config.bg,
       color: config.color,
-      border: `1px solid ${config.color}20`,
+      border: `1px solid ${config.border}`,
       whiteSpace: 'nowrap'
     }}>
       <Icon size={12} />

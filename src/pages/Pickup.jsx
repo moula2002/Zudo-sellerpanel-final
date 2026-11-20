@@ -16,15 +16,11 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { formatOrderNumber } from '../utils/orderFormat';
+import { getOrderStatusStyle } from '../utils/statusColors';
 
 const StatusBadge = ({ status }) => {
-  const configs = {
-    'Packed': { bg: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', icon: Clock },
-    'Picked Up': { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', icon: CheckCircle },
-  };
-
-  const config = configs[status] || { bg: 'rgba(255,255,255,0.05)', color: '#94a3b8', icon: AlertCircle };
-  const Icon = config.icon;
+  const config = getOrderStatusStyle(status);
+  const Icon = status === 'Packed' ? Clock : Truck;
 
   return (
     <span style={{
@@ -37,10 +33,10 @@ const StatusBadge = ({ status }) => {
       fontWeight: 700,
       background: config.bg,
       color: config.color,
-      border: `1px solid ${config.color}20`
+      border: `1px solid ${config.border}`
     }}>
       <Icon size={12} />
-      {status.toUpperCase()}
+      {status ? status.toUpperCase() : 'PENDING'}
     </span>
   );
 };

@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  Activity, CalendarDays, ChevronLeft, ChevronRight, Clock3, Download,
-  FileSpreadsheet, Filter, LoaderCircle, Printer, Search, X
+  Activity, Calendar, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight,
+  Clock, Clock3, Copy, CreditCard, Download, ExternalLink, Eye, FileSpreadsheet,
+  FileText, Filter, IndianRupee, Layers, LoaderCircle, MapPin, Package, Phone,
+  Printer, RefreshCcw, Search, ShoppingBag, Truck, User, X
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import api from '../utils/api';
+import { getOrderStatusStyle, StatusPill } from '../utils/statusColors';
 
 const HISTORY_API_ENABLED = import.meta.env.VITE_SELLER_HISTORY_API_ENABLED !== 'false';
 
 const categories = [
-  { id: 'all', label: 'All Activities' },
+  { id: 'all', label: 'All Orders' },
   { id: 'orders', label: 'Orders' },
   { id: 'delivered', label: 'Delivered' },
   { id: 'pickups', label: 'Pickup' },
@@ -402,11 +405,125 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
   return rows;
 };
 
+const consolidateClientRows = (rawRows = []) => {
+  const orderMap = new Map();
+  const nonOrderRows = [];
+
+  for (const row of rawRows) {
+    if (row.orderId) {
+      if (!orderMap.has(row.orderId)) {
+        orderMap.set(row.orderId, {
+          id: `order:${row.orderId}`,
+          orderId: row.orderId,
+          referenceId: row.referenceId,
+          customer: row.customer || {},
+          occurredAt: row.occurredAt,
+          createdAt: row.createdAt || row.details?.createdAt || row.occurredAt,
+          description: row.description,
+          amount: row.amount,
+          status: row.status,
+          paymentStatus: row.paymentStatus || row.details?.paymentStatus || '',
+          paymentMethod: row.paymentMethod || row.details?.paymentMethod || '',
+          activityType: 'orders',
+          activity: 'Order Record',
+          details: { ...(row.details || {}) },
+          activities: [],
+          categories: new Set(['orders', 'all'])
+        });
+      }
+      const entry = orderMap.get(row.orderId);
+
+      const activityItem = {
+        id: row.id,
+        activity: row.activity,
+        activityType: row.activityType,
+        occurredAt: row.occurredAt,
+        status: row.status,
+        description: row.description,
+        amount: row.amount,
+        details: row.details
+      };
+      if (!entry.activities.some(a => a.id === row.id || (a.activity === row.activity && a.occurredAt === row.occurredAt))) {
+        entry.activities.push(activityItem);
+      }
+
+      if (row.activityType) entry.categories.add(row.activityType);
+      if (row.status === 'Delivered' || row.activity === 'Order Delivered' || row.activityType === 'delivered') {
+        entry.categories.add('delivered');
+      }
+      if (row.activityType === 'pickups' || (row.activity && row.activity.toLowerCase().includes('pickup'))) {
+        entry.categories.add('pickups');
+      }
+      if (row.activityType === 'returns' || (row.activity && row.activity.toLowerCase().includes('return'))) {
+        entry.categories.add('returns');
+      }
+      if (row.activityType === 'payments' || ['Paid', 'Completed'].includes(row.details?.paymentStatus)) {
+        entry.categories.add('payments');
+      }
+      if (row.activityType === 'invoices' || row.details?.invoiceReferences?.length) {
+        entry.categories.add('invoices');
+      }
+      if (row.activityType === 'statusUpdates' || ['Cancelled', 'Rejected by Seller'].includes(row.status)) {
+        entry.categories.add('statusUpdates');
+      }
+
+      if (new Date(row.occurredAt).getTime() > new Date(entry.occurredAt).getTime()) {
+        entry.occurredAt = row.occurredAt;
+      }
+      if (row.details?.items?.length) entry.details.items = row.details.items;
+      if (row.details?.orderStatus) entry.status = row.details.orderStatus;
+      else if (row.status && row.activityType === 'orders') entry.status = row.status;
+      if (row.details?.pickup?.length) entry.details.pickup = row.details.pickup;
+      if (row.details?.driver) entry.details.driver = row.details.driver;
+      if (row.details?.invoiceReferences?.length) entry.details.invoiceReferences = row.details.invoiceReferences;
+      if (row.details?.returnItems?.length) entry.details.returnItems = row.details.returnItems;
+      if (row.details?.paymentStatus) entry.paymentStatus = row.details.paymentStatus;
+      if (row.details?.paymentMethod) entry.paymentMethod = row.details.paymentMethod;
+      if (row.items?.length && (!entry.items || !entry.items.length)) entry.items = row.items;
+      if (row.activities?.length) {
+        row.activities.forEach(a => {
+          if (!entry.activities.some(existing => existing.id === a.id || (existing.activity === a.activity && existing.occurredAt === a.occurredAt))) {
+            entry.activities.push(a);
+          }
+        });
+      }
+    } else {
+      nonOrderRows.push({
+        ...row,
+        activities: [{
+          id: row.id,
+          activity: row.activity,
+          activityType: row.activityType,
+          occurredAt: row.occurredAt,
+          status: row.status,
+          description: row.description,
+          amount: row.amount
+        }],
+        categories: new Set([row.activityType || 'all', 'all'])
+      });
+    }
+  }
+
+  for (const entry of orderMap.values()) {
+    entry.activities.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+    entry.categories = Array.from(entry.categories);
+    if (!entry.items && entry.details?.items) {
+      entry.items = entry.details.items;
+    }
+  }
+  for (const entry of nonOrderRows) {
+    entry.categories = Array.from(entry.categories);
+  }
+
+  return [...orderMap.values(), ...nonOrderRows];
+};
+
 const filterLegacyHistory = (sourceRows, { search, startDate, endDate, status, activityType, page, limit }) => {
+  const consolidated = consolidateClientRows(sourceRows);
   const start = startDate ? new Date(`${startDate}T00:00:00`) : null;
   const end = endDate ? new Date(`${endDate}T23:59:59.999`) : null;
   const needle = search.trim().toLowerCase();
-  const searchedRows = sourceRows.filter(row => {
+  const searchedRows = consolidated.filter(row => {
     const date = row.occurredAt ? new Date(row.occurredAt) : null;
     if ((start || end) && (!date || Number.isNaN(date.getTime()) || (start && date < start) || (end && date > end))) return false;
     if (status && String(row.status || '').toLowerCase() !== status.toLowerCase()) return false;
@@ -416,22 +533,33 @@ const filterLegacyHistory = (sourceRows, { search, startDate, endDate, status, a
       row.activity,
       row.customer?.name,
       row.customer?.phone,
+      row.customer?.address,
       row.description,
       row.status,
       row.orderId,
+      row.paymentMethod,
+      row.paymentStatus,
       row.details?.transactionId,
       row.details?.invoiceNumber,
       ...(row.details?.invoiceReferences || []),
-      ...(row.details?.order?.invoiceReferences || [])
+      ...(row.activities || []).map(a => `${a.activity} ${a.description} ${a.status}`)
     ].filter(Boolean).join(' ').toLowerCase();
     return text.includes(needle);
   });
+
   const counts = { all: searchedRows.length, orders: 0, delivered: 0, payments: 0, invoices: 0, returns: 0, pickups: 0, statusUpdates: 0 };
   searchedRows.forEach(row => {
-    if (Object.prototype.hasOwnProperty.call(counts, row.activityType)) counts[row.activityType] += 1;
+    if (Array.isArray(row.categories)) {
+      row.categories.forEach(cat => {
+        if (Object.prototype.hasOwnProperty.call(counts, cat)) counts[cat] += 1;
+      });
+    } else if (Object.prototype.hasOwnProperty.call(counts, row.activityType)) {
+      counts[row.activityType] += 1;
+    }
   });
+
   const categoryRows = searchedRows
-    .filter(row => activityType === 'all' || row.activityType === activityType)
+    .filter(row => activityType === 'all' || (Array.isArray(row.categories) ? row.categories.includes(activityType) : row.activityType === activityType))
     .sort((left, right) => (new Date(right.occurredAt || 0).getTime() || 0) - (new Date(left.occurredAt || 0).getTime() || 0));
   const totalPages = Math.ceil(categoryRows.length / limit);
   return {
@@ -542,11 +670,13 @@ const History = () => {
           },
           signal: controller.signal
         });
-        setRows(Array.isArray(data.data) ? data.data : []);
+        const incoming = Array.isArray(data.data) ? data.data : [];
+        const consolidatedData = consolidateClientRows(incoming);
+        setRows(consolidatedData);
         setCounts(data.counts || {});
         setStatuses(Array.isArray(data.statuses) ? data.statuses : []);
         setPagination(current => ({ ...current, ...(data.pagination || {}) }));
-        setSelected(current => (current && !data.data?.some(row => row.id === current.id || (row.orderId && row.orderId === current.orderId))) ? null : current);
+        setSelected(current => (current && !consolidatedData.some(row => row.id === current.id || (row.orderId && row.orderId === current.orderId))) ? null : current);
       } catch (requestError) {
         if (!controller.signal.aborted) {
           if (HISTORY_API_ENABLED && requestError.response?.status === 404) {
@@ -630,11 +760,15 @@ const History = () => {
     ? {
       activity: selected,
       details: selected.details || {},
-      relatedTransactions: (legacyRows || []).filter(row =>
-        row.orderId && row.orderId === selected.orderId && row.id !== selected.id
-      )
+      relatedTransactions: selected.activities || [],
+      activities: selected.activities || [selected]
     }
-    : detailData;
+    : (detailData || (selected ? {
+      activity: selected,
+      details: selected.details || {},
+      relatedTransactions: selected.activities || [],
+      activities: selected.activities || [selected]
+    } : null));
 
   const applyFilters = () => {
     setActiveFilters({ ...filterDraft });
@@ -703,7 +837,7 @@ const History = () => {
       const { data } = await api.get('/sellers/history', { params: { ...queryParams, page } });
       if (Array.isArray(data.data)) result.push(...data.data);
     }
-    return result;
+    return consolidateClientRows(result);
   };
 
   const exportRows = async (format) => {
@@ -712,14 +846,16 @@ const History = () => {
     try {
       const records = await fetchAllFilteredRecords();
       const exportData = records.map(row => ({
-        'Date & Time': formatDate(row.occurredAt),
-        Activity: row.activity,
-        'Reference ID': row.referenceId,
-        Customer: row.customer?.name || '',
-        Phone: row.customer?.phone || '',
-        Description: row.description,
-        Amount: row.amount ?? '',
-        Status: row.status
+        'Order Date': formatDate(row.createdAt || row.occurredAt),
+        'Order ID': row.referenceId,
+        'Customer': row.customer?.name || '',
+        'Phone': row.customer?.phone || '',
+        'Items Summary': row.description,
+        'Total Amount': row.amount ?? '',
+        'Payment Method': row.paymentMethod || row.details?.paymentMethod || '',
+        'Payment Status': row.paymentStatus || row.details?.paymentStatus || '',
+        'Order Status': row.status,
+        'Updates Count': row.activities?.length || 1
       }));
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
@@ -749,12 +885,12 @@ const History = () => {
       const savedSeller = getSellerFromStorage();
       const sellerName = savedSeller.storeName || savedSeller.businessName || savedSeller.name || 'Seller';
       const lines = records.map(row => `<tr>
-        <td>${escapeHtml(formatDate(row.occurredAt))}</td>
-        <td>${escapeHtml(row.activity)}</td>
-        <td>${escapeHtml(row.referenceId)}</td>
-        <td>${escapeHtml(row.customer?.name || '')}${row.customer?.phone ? `<br>${escapeHtml(row.customer.phone)}` : ''}</td>
+        <td>${escapeHtml(formatDate(row.createdAt || row.occurredAt))}</td>
+        <td><strong>${escapeHtml(row.referenceId)}</strong></td>
+        <td>${escapeHtml(row.customer?.name || '')}${row.customer?.phone ? `<br><small>${escapeHtml(row.customer.phone)}</small>` : ''}</td>
         <td>${escapeHtml(row.description)}</td>
         <td>${escapeHtml(formatAmount(row.amount))}</td>
+        <td>${escapeHtml([row.paymentMethod || row.details?.paymentMethod, row.paymentStatus || row.details?.paymentStatus].filter(Boolean).join(' · '))}</td>
         <td>${escapeHtml(row.status)}</td>
       </tr>`).join('');
       const dateRange = [activeFilters.startDate, activeFilters.endDate].filter(Boolean).join(' to ') || 'All available dates';
@@ -884,14 +1020,18 @@ const History = () => {
 
         <section style={{ background: 'var(--glass-bg)', border: '1px solid var(--border-color)', borderRadius: 16, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '16px 18px', borderBottom: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontWeight: 750 }}><Activity size={18} color="var(--primary)" /> Activity Records</div>
-            <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{error ? 'Count unavailable' : `${visiblePagination.totalRecords || 0} records`}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontWeight: 750 }}>
+              <ShoppingBag size={18} color="var(--primary)" /> Order History Records
+            </div>
+            <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>
+              {error ? 'Count unavailable' : `${visiblePagination.totalRecords || visibleRows.length || 0} orders`}
+            </span>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', textAlign: 'left' }}>
+            <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ color: 'var(--text-dim)', fontSize: 12, background: 'rgba(99,102,241,.04)' }}>
-                  {['Date & Time', 'Activity', 'Reference ID', 'Customer', 'Description', 'Amount', 'Status', 'Action'].map(heading => (
+                  {['Date & Time', 'Order ID', 'Customer', 'Products / Items', 'Total Amount', 'Payment', 'Order Status', 'Action'].map(heading => (
                     <th key={heading} style={{ padding: '12px 14px', fontWeight: 700 }}>{heading}</th>
                   ))}
                 </tr>
@@ -904,15 +1044,70 @@ const History = () => {
                 ) : visibleRows.length === 0 ? (
                   <tr><td colSpan="8" style={{ padding: 48, textAlign: 'center', color: 'var(--text-dim)' }}><Clock3 size={25} style={{ marginBottom: 8 }} /><div>No business history records match these filters.</div></td></tr>
                 ) : visibleRows.map(row => (
-                  <tr className="history-row" key={row.id} style={{ borderTop: '1px solid var(--border-color)', fontSize: 13 }}>
-                    <td style={{ padding: '14px' }}>{formatDate(row.occurredAt)}</td>
-                    <td style={{ padding: '14px', fontWeight: 650 }}>{safeText(row.activity)}</td>
-                    <td style={{ padding: '14px', fontWeight: 700, color: 'var(--primary)' }}>{safeText(row.referenceId)}</td>
-                    <td style={{ padding: '14px' }}><div>{safeText(row.customer?.name)}</div><small style={{ color: 'var(--text-dim)' }}>{safeText(row.customer?.phone)}</small></td>
-                    <td style={{ padding: '14px', maxWidth: 280, color: 'var(--text-dim)' }}>{safeText(row.description)}</td>
-                    <td style={{ padding: '14px', fontWeight: 700 }}>{formatAmount(row.amount)}</td>
-                    <td style={{ padding: '14px' }}><span style={{ background: 'rgba(99,102,241,.1)', color: 'var(--primary)', padding: '5px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{safeText(row.status)}</span></td>
-                    <td style={{ padding: '14px' }}><button type="button" onClick={() => openDetails(row)} className="history-action" style={{ padding: '7px 10px', fontSize: 12 }}>View Details</button></td>
+                  <tr
+                    className="history-row"
+                    key={row.id}
+                    onClick={() => openDetails(row)}
+                    style={{ borderTop: '1px solid var(--border-color)', fontSize: 13, cursor: 'pointer' }}
+                  >
+                    <td style={{ padding: '14px', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Clock size={13} style={{ color: 'var(--text-dim)' }} />
+                        <span>{formatDate(row.createdAt || row.occurredAt)}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px' }}>
+                      <div style={{ fontWeight: 750, color: 'var(--primary)', fontFamily: 'monospace', fontSize: 14 }}>
+                        {safeText(row.referenceId)}
+                      </div>
+                      {row.activities?.length > 1 && (
+                        <span style={{ fontSize: 10, color: 'var(--text-dim)', background: 'rgba(99,102,241,0.08)', padding: '2px 6px', borderRadius: 8, fontWeight: 600 }}>
+                          {row.activities.length} updates
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '14px' }}>
+                      <div style={{ fontWeight: 650 }}>{safeText(row.customer?.name)}</div>
+                      <small style={{ color: 'var(--text-dim)' }}>{safeText(row.customer?.phone)}</small>
+                    </td>
+                    <td style={{ padding: '14px', maxWidth: 280 }}>
+                      <div style={{ fontWeight: 550, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {safeText(row.description)}
+                      </div>
+                      {row.items?.length > 1 && (
+                        <small style={{ color: 'var(--text-dim)' }}>+{row.items.length - 1} other item{row.items.length > 2 ? 's' : ''}</small>
+                      )}
+                    </td>
+                    <td style={{ padding: '14px', fontWeight: 750, fontSize: 14 }}>
+                      {formatAmount(row.amount)}
+                    </td>
+                    <td style={{ padding: '14px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 11, fontWeight: 650 }}>
+                          {safeText(row.paymentMethod || row.details?.paymentMethod || '—')}
+                        </span>
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: ['Paid', 'Completed', 'verified'].includes(String(row.paymentStatus || row.details?.paymentStatus || '').toLowerCase()) ? '#059669' : '#d97706'
+                        }}>
+                          {safeText(row.paymentStatus || row.details?.paymentStatus || 'Pending')}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px' }}>
+                      <StatusPill status={row.status} />
+                    </td>
+                    <td style={{ padding: '14px' }} onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => openDetails(row)}
+                        className="history-action"
+                        style={{ padding: '7px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Eye size={14} /> View Details
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -929,56 +1124,216 @@ const History = () => {
       </div>
 
       {selected && (
-        <div role="presentation" onClick={() => setSelected(null)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,.58)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="history-detail-title" onClick={event => event.stopPropagation()} style={{ width: 'min(760px,100%)', maxHeight: '90vh', overflowY: 'auto', borderRadius: 18, padding: 24, background: 'var(--bg-dark)', border: '1px solid var(--border-color)', boxShadow: '0 24px 70px rgba(0,0,0,.3)' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
-              <div><h2 id="history-detail-title" style={{ margin: 0, fontSize: 21 }}>{safeText(selectedActivity?.activity)}</h2><p style={{ color: 'var(--text-dim)', margin: '6px 0 0' }}>{formatDate(selectedActivity?.occurredAt)}</p></div>
-              <button type="button" aria-label="Close details" onClick={() => setSelected(null)} className="history-action" style={{ padding: 8 }}><X size={18} /></button>
-            </header>
-            {detailLoading ? <p style={{ color: 'var(--text-dim)' }}>Loading activity details…</p> : null}
-            {detailError && <p role="alert" style={{ color: '#dc2626' }}>{detailError}</p>}
-            {!detailLoading && selectedDetailsData && (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
-                  <DetailBlock title="Reference" value={selectedActivity.referenceId} />
-                  <DetailBlock title="Order ID" value={details.order?.referenceId || details.orderId || selectedActivity.orderId} />
-                  <DetailBlock title="Customer" value={detailCustomer?.name || selectedActivity.customer?.name} subvalue={detailCustomer?.phone || selectedActivity.customer?.phone} />
-                  <DetailBlock title="Amount" value={formatAmount(selectedActivity.amount)} />
-                  <DetailBlock title="Status" value={selectedActivity.status} />
-                  <DetailBlock title="Payment Method" value={details.paymentMethod || details.order?.paymentMethod} />
+        <div role="presentation" onClick={() => setSelected(null)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,.65)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="history-detail-title" onClick={event => event.stopPropagation()} style={{ width: 'min(860px,100%)', maxHeight: '92vh', overflowY: 'auto', borderRadius: 20, padding: 26, background: 'var(--bg-dark)', border: '1px solid var(--border-color)', boxShadow: '0 25px 75px rgba(0,0,0,.35)' }}>
+            
+            {/* Modal Header */}
+            <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', paddingBottom: 18, borderBottom: '1px solid var(--border-color)', marginBottom: 20 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <h2 id="history-detail-title" style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>
+                    Order {selectedActivity?.referenceId || selected?.referenceId}
+                  </h2>
+                  <StatusPill status={selectedActivity?.status || selected?.status} style={{ fontSize: 12, padding: '4px 12px' }} />
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 20,
+                    background: ['paid', 'completed'].includes(String(selected?.paymentStatus || details.paymentStatus || '').toLowerCase()) ? 'rgba(16, 185, 129, 0.14)' : 'rgba(245, 158, 11, 0.14)',
+                    color: ['paid', 'completed'].includes(String(selected?.paymentStatus || details.paymentStatus || '').toLowerCase()) ? '#059669' : '#d97706',
+                    border: `1px solid ${['paid', 'completed'].includes(String(selected?.paymentStatus || details.paymentStatus || '').toLowerCase()) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                  }}>
+                    {selected?.paymentStatus || details.paymentStatus || 'Payment Pending'}
+                  </span>
                 </div>
-                {detailCustomer?.address && <p style={{ color: 'var(--text-dim)', marginTop: 14 }}><strong>Customer address:</strong> {[detailCustomer.address, detailCustomer.city, detailCustomer.state, detailCustomer.pincode].filter(Boolean).join(', ')}</p>}
-                {details.description && <p style={{ color: 'var(--text-dim)' }}>{details.description}</p>}
-                {(details.items || details.order?.items || details.returnItems) && (
-                  <DetailList title="Products" items={details.returnItems || details.items || details.order?.items} />
-                )}
-                {details.invoiceReferences?.length > 0 && <DetailBlock title="Invoice References" value={details.invoiceReferences.join(', ')} />}
-                {details.invoiceNumber && <DetailBlock title="Invoice" value={details.invoiceNumber} />}
-                {details.driverName && <DetailBlock title="Assigned Driver" value={details.driverName} subvalue={details.driverPhone} />}
-                {details.relatedOrders?.length > 0 && (
-                  <DetailList title="Related Orders" items={details.relatedOrders.map(order => ({
-                    name: order.referenceId,
-                    quantity: order.items?.length || 0,
-                    unit: 'items',
-                    amount: order.items?.reduce((total, item) => total + (Number(item.amount) || 0), 0)
-                  }))} />
-                )}
-                {(details.pickup || details.order?.pickup || []).map((pickup, index) => (
-                  <DetailBlock key={`${pickup.id || 'pickup'}-${index}`} title="Pickup" value={[pickup.status, pickup.scheduledDate && formatDate(pickup.scheduledDate)].filter(Boolean).join(' · ')} subvalue={pickup.driver?.name ? `${pickup.driver.name}${pickup.driver.phone ? ` · ${pickup.driver.phone}` : ''}` : ''} />
-                ))}
-                {selectedDetailsData.relatedTransactions?.length > 0 && (
-                  <div style={{ marginTop: 20 }}>
-                    <h3 style={{ fontSize: 15 }}>Related transaction history</h3>
-                    {selectedDetailsData.relatedTransactions.map(item => (
-                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: '1px solid var(--border-color)' }}>
-                        <span>{safeText(item.activity)} <small style={{ color: 'var(--text-dim)' }}>{formatDate(item.occurredAt)}</small></span>
-                        <strong>{formatAmount(item.amount)}</strong>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
+                <p style={{ color: 'var(--text-dim)', margin: '6px 0 0', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Calendar size={14} /> Placed on {formatDate(selected?.createdAt || selectedActivity?.occurredAt)}
+                </p>
+              </div>
+              <button type="button" aria-label="Close details" onClick={() => setSelected(null)} className="history-action" style={{ padding: 8, borderRadius: 10 }}>
+                <X size={18} />
+              </button>
+            </header>
+
+            {detailLoading ? (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-dim)' }}>
+                <LoaderCircle size={20} className="history-spin" style={{ verticalAlign: 'middle', marginRight: 8 }} />
+                Loading latest order updates…
+              </div>
+            ) : null}
+            {detailError && <p role="alert" style={{ color: '#dc2626', marginBottom: 14 }}>{detailError}</p>}
+
+            {/* 4-Card Summary Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 22 }}>
+              
+              {/* Card 1: Amount */}
+              <div style={{ padding: 14, background: 'var(--glass-bg)', border: '1px solid var(--border-color)', borderRadius: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', marginBottom: 6 }}>
+                  <IndianRupee size={14} color="var(--primary)" /> TOTAL ORDER AMOUNT
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-main)' }}>
+                  {formatAmount(selected?.amount ?? selectedActivity?.amount)}
+                </div>
+                <small style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                  {(details.items || selected?.items || []).length} items from your store
+                </small>
+              </div>
+
+              {/* Card 2: Payment */}
+              <div style={{ padding: 14, background: 'var(--glass-bg)', border: '1px solid var(--border-color)', borderRadius: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', marginBottom: 6 }}>
+                  <CreditCard size={14} color="#d97706" /> PAYMENT INFO
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
+                  {safeText(details.paymentMethod || selected?.paymentMethod || 'Cash on Delivery')}
+                </div>
+                <small style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                  Status: {safeText(details.paymentStatus || selected?.paymentStatus || 'Pending')}
+                  {details.transactionId ? ` · Ref: ${details.transactionId}` : ''}
+                </small>
+              </div>
+
+              {/* Card 3: Customer */}
+              <div style={{ padding: 14, background: 'var(--glass-bg)', border: '1px solid var(--border-color)', borderRadius: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', marginBottom: 6 }}>
+                  <User size={14} color="#059669" /> CUSTOMER
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
+                  {safeText(detailCustomer?.name || selected?.customer?.name)}
+                </div>
+                <small style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                  {safeText(detailCustomer?.phone || selected?.customer?.phone)}
+                </small>
+              </div>
+
+              {/* Card 4: Pickup & Driver */}
+              <div style={{ padding: 14, background: 'var(--glass-bg)', border: '1px solid var(--border-color)', borderRadius: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', marginBottom: 6 }}>
+                  <Truck size={14} color="#4f46e5" /> PICKUP / DISPATCH
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
+                  {safeText((details.pickup?.[0]?.status) || (selected?.pickup?.[0]?.status) || selected?.status || 'Scheduled')}
+                </div>
+                <small style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                  {((details.pickup?.[0]?.pickupCode) || (selected?.pickup?.[0]?.pickupCode)) ? `OTP / Code: ${(details.pickup?.[0]?.pickupCode) || (selected?.pickup?.[0]?.pickupCode)}` : ''}
+                  {details.driverName || details.driver?.name ? ` · Driver: ${details.driverName || details.driver?.name}` : ''}
+                </small>
+              </div>
+
+            </div>
+
+            {/* Customer Delivery Address */}
+            {(detailCustomer?.address || selected?.customer?.address) && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--glass-bg)', border: '1px solid var(--border-color)', borderRadius: 12, marginBottom: 20, fontSize: 12, color: 'var(--text-dim)' }}>
+                <MapPin size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: 1 }} />
+                <div>
+                  <strong style={{ color: 'var(--text-main)' }}>Delivery Address: </strong>
+                  {[
+                    detailCustomer?.address || selected?.customer?.address,
+                    detailCustomer?.city || selected?.customer?.city,
+                    detailCustomer?.state || selected?.customer?.state,
+                    detailCustomer?.pincode || selected?.customer?.pincode
+                  ].filter(Boolean).join(', ')}
+                </div>
+              </div>
             )}
+
+            {/* Ordered Products Table */}
+            {(details.items || details.order?.items || details.returnItems || selected?.items) && (
+              <div style={{ marginBottom: 24 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 750, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Package size={16} color="var(--primary)" /> Products Ordered from Your Store
+                </h3>
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: 12, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(99,102,241,.04)', color: 'var(--text-dim)', fontSize: 11, fontWeight: 700 }}>
+                        <th style={{ padding: '10px 14px' }}>Product</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center' }}>Qty</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right' }}>Unit Price</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(details.returnItems || details.items || details.order?.items || selected?.items || []).map((item, index) => (
+                        <tr key={`${item.name || 'item'}-${index}`} style={{ borderTop: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ fontWeight: 650 }}>{safeText(item.name)}</div>
+                            {(item.unit || item.measurement) && (
+                              <small style={{ color: 'var(--text-dim)' }}>{[item.measurement, item.unit].filter(Boolean).join(' · ')}</small>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 600 }}>
+                            {safeText(item.quantity)}
+                          </td>
+                          <td style={{ padding: '12px 14px', textAlign: 'right', color: 'var(--text-dim)' }}>
+                            {item.unitPrice ? formatAmount(item.unitPrice) : '—'}
+                          </td>
+                          <td style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700 }}>
+                            {formatAmount(item.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Invoices */}
+            {(details.invoiceReferences?.length > 0 || details.invoiceNumber) && (
+              <div style={{ padding: '12px 14px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 12, marginBottom: 20, fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FileText size={16} color="#7c3aed" />
+                <span>
+                  <strong>Invoice Reference: </strong>
+                  {[details.invoiceNumber, ...(details.invoiceReferences || [])].filter(Boolean).join(', ')}
+                </span>
+              </div>
+            )}
+
+            {/* Complete Activity History & Status Updates Timeline */}
+            <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 750, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Clock size={16} color="var(--primary)" /> Complete Order Activity Timeline & Updates
+                </h3>
+                <span style={{ fontSize: 11, background: 'rgba(99,102,241,0.1)', color: 'var(--primary)', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
+                  {(selectedDetailsData?.activities || selected?.activities || [selectedActivity]).length} updates
+                </span>
+              </div>
+
+              <div style={{ position: 'relative', paddingLeft: 24, borderLeft: '2px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 18, marginLeft: 8 }}>
+                {(selectedDetailsData?.activities || selected?.activities || [selectedActivity]).map((act, idx) => (
+                  <div key={act.id || idx} style={{ position: 'relative' }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: -31,
+                      top: 3,
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      background: idx === 0 ? 'var(--primary)' : 'var(--bg-dark)',
+                      border: `2px solid ${idx === 0 ? 'var(--primary)' : 'var(--border-color)'}`,
+                      boxShadow: idx === 0 ? '0 0 0 3px rgba(99,102,241,0.2)' : 'none'
+                    }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-main)' }}>{safeText(act.activity)}</span>
+                        {act.status && <StatusPill status={act.status} style={{ fontSize: 10, padding: '2px 8px' }} />}
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{formatDate(act.occurredAt)}</span>
+                    </div>
+                    {act.description && (
+                      <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-dim)' }}>
+                        {safeText(act.description)}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </section>
         </div>
       )}
@@ -992,7 +1347,7 @@ const DetailBlock = ({ title, value, subvalue }) => {
   return (
     <div style={{ padding: 12, border: '1px solid var(--border-color)', borderRadius: 11 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', marginBottom: 5 }}>{title}</div>
-      <div style={{ fontWeight: 650 }}>{safeText(value)}</div>
+      <div style={{ fontWeight: 650 }}>{React.isValidElement(value) ? value : safeText(value)}</div>
       {subvalue ? <small style={{ color: 'var(--text-dim)' }}>{safeText(subvalue)}</small> : null}
     </div>
   );
