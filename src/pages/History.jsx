@@ -109,13 +109,17 @@ const getLegacyOrderReference = (order) => {
 
 const toLegacyItem = (item) => {
   const quantity = Number(item.quantity) || 0;
-  const unitPrice = Number(item.price ?? item.unitCustomerPrice) || 0;
-  const savedAmount = Number(item.finalCustomerAmount ?? item.finalCustomerPrice);
+  const unitPrice = item.normalPrice !== undefined && item.normalPrice !== null
+    ? Number(item.normalPrice)
+    : (item.netPrice !== undefined && item.netPrice !== null ? Number(item.netPrice) : Number(item.price ?? item.unitCustomerPrice) || 0);
+  const sellerAmount = item.totalSellerAmount !== undefined && item.totalSellerAmount !== null && Number(item.totalSellerAmount) > 0
+    ? Number(item.totalSellerAmount)
+    : unitPrice * quantity;
   return {
     name: item.name || item.product?.name || '',
     quantity,
     unit: item.variantSize || item.packagingType || item.unit || item.sellingUnit || '',
-    amount: Number.isFinite(savedAmount) && savedAmount > 0 ? savedAmount : unitPrice * quantity,
+    amount: sellerAmount,
     unitPrice,
     taxAmount: Number(item.gstAmount || item.totalGst) || 0
   };
@@ -149,11 +153,9 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
     const itemDetails = items.map(toLegacyItem);
     const orderTotal = (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null)
       ? Number(order.totalAmountWithoutCommissions)
-      : ((order.sellerTotalCustomerAmount !== undefined && order.sellerTotalCustomerAmount !== null)
-          ? Number(order.sellerTotalCustomerAmount)
-          : ((order.totalAmount !== undefined && order.totalAmount !== null)
-              ? Number(order.totalAmount)
-              : itemDetails.reduce((total, item) => total + item.amount, 0)));
+      : ((order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null)
+          ? Number(order.sellerItemsNetTotal)
+          : itemDetails.reduce((total, item) => total + item.amount, 0));
     const amount = orderTotal;
     const orderId = idString(order._id);
     const referenceId = getLegacyOrderReference(order);

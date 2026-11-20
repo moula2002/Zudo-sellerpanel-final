@@ -39,13 +39,17 @@ const getLegacyOrderReference = (order) => {
 
 const toLegacyItem = (item) => {
   const quantity = Number(item.quantity) || 0;
-  const unitPrice = Number(item.price ?? item.unitCustomerPrice) || 0;
-  const savedAmount = Number(item.finalCustomerAmount ?? item.finalCustomerPrice);
+  const unitPrice = item.normalPrice !== undefined && item.normalPrice !== null
+    ? Number(item.normalPrice)
+    : (item.netPrice !== undefined && item.netPrice !== null ? Number(item.netPrice) : Number(item.price ?? item.unitCustomerPrice) || 0);
+  const sellerAmount = item.totalSellerAmount !== undefined && item.totalSellerAmount !== null && Number(item.totalSellerAmount) > 0
+    ? Number(item.totalSellerAmount)
+    : unitPrice * quantity;
   return {
     name: item.name || item.product?.name || '',
     quantity,
     unit: item.variantSize || item.packagingType || item.unit || item.sellingUnit || '',
-    amount: Number.isFinite(savedAmount) && savedAmount > 0 ? savedAmount : unitPrice * quantity,
+    amount: sellerAmount,
     unitPrice,
     taxAmount: Number(item.gstAmount || item.totalGst) || 0
   };
@@ -76,7 +80,11 @@ const buildHistory = ({ seller, products, orders, invoices = [], pickups = [], r
       pincode: order.shippingAddress?.pincode || ''
     };
     const itemDetails = items.map(toLegacyItem);
-    const amount = itemDetails.reduce((total, item) => total + item.amount, 0);
+    const amount = (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null)
+      ? Number(order.totalAmountWithoutCommissions)
+      : ((order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null)
+          ? Number(order.sellerItemsNetTotal)
+          : itemDetails.reduce((total, item) => total + item.amount, 0));
     const orderId = idString(order._id);
     const referenceId = getLegacyOrderReference(order);
     const embeddedPickups = (order.sellerPickups || [])
@@ -886,60 +894,45 @@ assert(!cleanedOrders.some(o => o.orderId === 'deleted-order-999'), 'Deleted ord
 assert(!cleanedOrders.some(o => o.referenceId === '' || o.referenceId === '—'), 'Ghost orders with empty reference ID must be completely filtered out');
 console.log('  [PASS] Deleted Order Cleanup: 2 orphaned events for deleted order-999 (amount ₹1,00,500) were 100% excluded (0 ghost rows rendered)');
 
-// 7. Test Total Amount Consistency between Seller Orders & Seller History
-console.log('\n--- 11. TESTING TOTAL AMOUNT CONSISTENCY (SELLER ORDERS VS SELLER HISTORY) ---');
-// Multi-seller simulated order:
-// Total order in DB has Seller A item (₹1,53,765) and Seller B item (₹45,000). Total = ₹1,98,765.
-const consistencyOrder24 = {
-  _id: 'order-multi-24',
-  orderNumber: 24,
-  createdAt: '2026-11-20T11:19:00Z',
-  totalAmount: 198765,
+// 7. Test Total Amount Consistency between Seller Orders & Seller History (No Extra Commission Added)
+console.log('\n--- 11. TESTING TOTAL AMOUNT CONSISTENCY: SELLER ORDERS VS SELLER HISTORY ---');
+
+// Test Case A: Order #00027 (Exactly matching user screenshots: ₹1,00,000 without commission vs ₹1,00,500 customer amount)
+const order27 = {
+  _id: 'order-27-id',
+  orderNumber: 27,
+  createdAt: '2026-11-20T18:37:00Z',
+  totalAmount: 100500, // Includes ₹500 commission
+  totalAmountWithoutCommissions: 100000, // Seller payout without commissions
   items: [
     {
-      name: 'spider - 30KG',
-      quantity: 5,
-      price: 30753,
-      normalPrice: 30000,
-      totalSellerAmount: 150000,
-      finalCustomerAmount: 153765,
-      seller: { sellerId: 'seller-a-id', name: 'Seller A' }
-    },
-    {
-      name: 'other product',
-      quantity: 3,
-      price: 15000,
-      normalPrice: 14000,
-      totalSellerAmount: 42000,
-      finalCustomerAmount: 45000,
-      seller: { sellerId: 'seller-b-id', name: 'Seller B' }
+      name: 'vignesh product - 10KG',
+      quantity: 10,
+      price: 10050, // customer price (includes ₹50 commission)
+      normalPrice: 10000, // seller base price
+      totalSellerAmount: 100000, // 10 * 10000
+      finalCustomerAmount: 100500, // 10 * 10050
+      seller: { sellerId: 'vignesh-id', name: 'vignesh' }
     }
   ]
 };
 
-// Simulation of /sellers/orders processing for Seller A:
-const consistencySellerAItems = consistencyOrder24.items.filter(i => i.seller.sellerId === 'seller-a-id');
-let consistencySellerAItemsNetTotal = 0;
-let consistencySellerATotalCustomerAmount = 0;
-consistencySellerAItems.forEach(item => {
-  const qty = Number(item.quantity) || 1;
-  const lineCustomerTotal = item.finalCustomerAmount !== undefined && item.finalCustomerAmount !== null
-    ? Number(item.finalCustomerAmount)
-    : (Number(item.price || 0) * qty);
-  consistencySellerATotalCustomerAmount += lineCustomerTotal;
+// Simulation of /sellers/orders processing for Order #00027:
+const order27SellerItems = order27.items.filter(i => i.seller.sellerId === 'vignesh-id');
+let order27SellerItemsNetTotal = 0;
+order27SellerItems.forEach(item => {
   const normalPrice = Number(item.normalPrice || item.price || 0);
-  consistencySellerAItemsNetTotal += Number(item.totalSellerAmount || (normalPrice * qty));
+  const qty = Number(item.quantity) || 1;
+  order27SellerItemsNetTotal += Number(item.totalSellerAmount || (normalPrice * qty));
 });
-const sellerAOrdersRecord = {
-  ...consistencyOrder24,
-  items: consistencySellerAItems,
-  sellerItemsNetTotal: consistencySellerAItemsNetTotal,
-  sellerTotalCustomerAmount: consistencySellerATotalCustomerAmount,
-  totalAmountWithoutCommissions: consistencySellerATotalCustomerAmount,
-  totalAmount: consistencySellerATotalCustomerAmount
+const sellerOrdersRecord27 = {
+  ...order27,
+  items: order27SellerItems,
+  sellerItemsNetTotal: order27SellerItemsNetTotal,
+  totalAmountWithoutCommissions: order27SellerItemsNetTotal,
+  totalAmount: order27SellerItemsNetTotal
 };
 
-// Seller Orders page helper getOrderTotal:
 const getOrderTotalFromSellerOrders = (order) => {
   return order.totalAmountWithoutCommissions !== undefined
     ? order.totalAmountWithoutCommissions
@@ -948,33 +941,98 @@ const getOrderTotalFromSellerOrders = (order) => {
         : order.totalAmount);
 };
 
-const ordersPageTotal = getOrderTotalFromSellerOrders(sellerAOrdersRecord);
-assert.strictEqual(ordersPageTotal, 153765, 'Seller Orders page TOTAL for Order #24 must be exactly ₹1,53,765.00');
+const order27OrdersPageTotal = getOrderTotalFromSellerOrders(sellerOrdersRecord27);
+assert.strictEqual(order27OrdersPageTotal, 100000, 'Seller Orders page TOTAL for Order #00027 must be exactly ₹1,00,000');
 
-// Seller History page processing for Seller A:
-const historyRowForOrder24 = {
-  id: 'order:order-multi-24',
-  orderId: 'order-multi-24',
-  referenceId: '#00024',
+// Seller History page processing for Order #00027:
+const order27HistoryItems = order27SellerItems.map(toLegacyItem);
+const order27HistoryItemTotal = order27HistoryItems.reduce((sum, item) => sum + item.amount, 0);
+assert.strictEqual(order27HistoryItemTotal, 100000, 'toLegacyItem must calculate seller amount without commission (₹1,00,000, NOT ₹1,00,500)');
+
+const historyRowForOrder27 = {
+  id: 'order:order-27-id',
+  orderId: 'order-27-id',
+  referenceId: '#00027',
   customer: { name: 'vignesh', phone: '8072066014' },
   activityType: 'orders',
   activity: 'Order Record',
-  occurredAt: '2026-11-20T11:19:00Z',
-  amount: ordersPageTotal,
+  occurredAt: '2026-11-20T18:37:00Z',
+  amount: order27OrdersPageTotal,
   status: 'Packed',
   details: {
-    orderTotal: ordersPageTotal,
-    items: consistencySellerAItems.map(toLegacyItem)
+    orderTotal: order27OrdersPageTotal,
+    items: order27HistoryItems
   }
 };
 
-const consolidatedForSellerA = consolidateHistory([historyRowForOrder24]);
-const order24InHistory = consolidatedForSellerA.find(o => o.orderId === 'order-multi-24');
-assert(order24InHistory, 'Order #00024 must be in Seller History');
-assert.strictEqual(order24InHistory.amount, ordersPageTotal, 'Seller History Total Amount must match Seller Orders TOTAL exactly (₹1,53,765.00)');
-assert.strictEqual(order24InHistory.amount, 153765, 'Exact amount ₹1,53,765.00 matches expectation');
-console.log('  [PASS] Order #00024 Amount Consistency: Exactly ₹1,53,765.00 matches across both Seller Orders & Seller History');
-console.log('  [PASS] Multi-Seller Isolation: Seller A sees ₹1,53,765.00 (not the ₹1,98,765 full order total with Seller B)');
+const consolidatedOrder27 = consolidateHistory([historyRowForOrder27]);
+const record27 = consolidatedOrder27.find(o => o.orderId === 'order-27-id');
+assert(record27, 'Order #00027 must be in Seller History');
+assert.strictEqual(record27.amount, 100000, 'Seller History Total Amount for Order #00027 must be exactly ₹1,00,000 (NOT ₹1,00,500)');
+assert.strictEqual(record27.amount, order27OrdersPageTotal, 'Seller History Total Amount matches Seller Orders TOTAL exactly');
+console.log('  [PASS] Order #00027 Match: Exactly ₹1,00,000 matches in both Seller Orders and Seller History (extra ₹500 commission is NOT added)');
+
+// Test Case B: Multi-Seller Order Isolation without commissions
+const multiOrder = {
+  _id: 'order-multi-99',
+  orderNumber: 99,
+  totalAmount: 145500, // Includes commissions from both sellers
+  items: [
+    {
+      name: 'Seller A Product',
+      quantity: 10,
+      normalPrice: 10000,
+      price: 10050,
+      totalSellerAmount: 100000,
+      finalCustomerAmount: 100500,
+      seller: { sellerId: 'seller-a-id', name: 'Seller A' }
+    },
+    {
+      name: 'Seller B Product',
+      quantity: 3,
+      normalPrice: 15000,
+      price: 15000,
+      totalSellerAmount: 45000,
+      finalCustomerAmount: 45000,
+      seller: { sellerId: 'seller-b-id', name: 'Seller B' }
+    }
+  ]
+};
+
+const sellerAItemsOnly = multiOrder.items.filter(i => i.seller.sellerId === 'seller-a-id');
+let sellerANet = 0;
+sellerAItemsOnly.forEach(item => {
+  sellerANet += Number(item.totalSellerAmount || (item.normalPrice * item.quantity));
+});
+const sellerAOrdersRec = {
+  ...multiOrder,
+  items: sellerAItemsOnly,
+  sellerItemsNetTotal: sellerANet,
+  totalAmountWithoutCommissions: sellerANet,
+  totalAmount: sellerANet
+};
+const sellerAOrdersTotal = getOrderTotalFromSellerOrders(sellerAOrdersRec);
+assert.strictEqual(sellerAOrdersTotal, 100000, 'Seller A Orders page must show ₹1,00,000 for their items');
+
+const historyRowMultiSellerA = {
+  id: 'order:order-multi-99',
+  orderId: 'order-multi-99',
+  referenceId: '#00099',
+  customer: { name: 'Customer', phone: '9999999999' },
+  activityType: 'orders',
+  activity: 'Order Record',
+  occurredAt: '2026-11-20T18:37:00Z',
+  amount: sellerAOrdersTotal,
+  status: 'Packed',
+  details: {
+    orderTotal: sellerAOrdersTotal,
+    items: sellerAItemsOnly.map(toLegacyItem)
+  }
+};
+const consolidatedMulti = consolidateHistory([historyRowMultiSellerA]);
+const multiRecordA = consolidatedMulti.find(o => o.orderId === 'order-multi-99');
+assert.strictEqual(multiRecordA.amount, 100000, 'Seller A History must show ₹1,00,000 (not full order ₹1,45,500 and not ₹1,00,500)');
+console.log('  [PASS] Multi-Seller Order: Seller A sees ₹1,00,000 in both Orders & History (isolated from Seller B and commissions)');
 
 console.log('\n================================================================');
 console.log('            ALL SELLER HISTORY TESTS PASSED!                    ');
