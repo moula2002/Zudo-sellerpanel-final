@@ -50,11 +50,24 @@ const Orders = () => {
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const getOrderTotal = (order) => {
-    return order.totalAmountWithoutCommissions !== undefined 
-      ? order.totalAmountWithoutCommissions 
-      : (order.sellerItemsNetTotal !== undefined 
-          ? order.sellerItemsNetTotal 
-          : order.totalAmount);
+    if (order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null && Number(order.sellerItemsNetTotal) > 0) {
+      return Number(order.sellerItemsNetTotal);
+    }
+    if (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0) {
+      return Number(order.totalAmountWithoutCommissions);
+    }
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      const sum = order.items.reduce((acc, it) => {
+        if (it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0) {
+          return acc + Number(it.totalSellerAmount);
+        }
+        const normal = Number(it.normalPrice ?? it.netPrice ?? it.price ?? 0);
+        const qty = Number(it.quantity) || 1;
+        return acc + (normal * qty);
+      }, 0);
+      if (sum > 0) return sum;
+    }
+    return Number(order.totalAmount) || 0;
   };
 
   const exportToExcel = () => {

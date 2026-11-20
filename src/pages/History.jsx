@@ -151,11 +151,14 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
       pincode: order.shippingAddress?.pincode || ''
     };
     const itemDetails = items.map(toLegacyItem);
-    const orderTotal = (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null)
-      ? Number(order.totalAmountWithoutCommissions)
-      : ((order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null)
+    const calculatedSellerOrderTotal = itemDetails.reduce((total, item) => total + item.amount, 0);
+    const orderTotal = calculatedSellerOrderTotal > 0
+      ? calculatedSellerOrderTotal
+      : ((order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null && Number(order.sellerItemsNetTotal) > 0)
           ? Number(order.sellerItemsNetTotal)
-          : itemDetails.reduce((total, item) => total + item.amount, 0));
+          : ((order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0)
+              ? Number(order.totalAmountWithoutCommissions)
+              : Number(order.totalAmount) || 0));
     const amount = orderTotal;
     const orderId = idString(order._id);
     const referenceId = getLegacyOrderReference(order);
@@ -414,7 +417,45 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
   return rows;
 };
 
-const consolidateClientRows = (rawRows = []) => {
+const getSellerOrderCanonicalTotal = (order) => {
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    const sum = order.items.reduce((total, it) => {
+      if (it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0) {
+        return total + Number(it.totalSellerAmount);
+      }
+      const normal = it.normalPrice !== undefined && it.normalPrice !== null
+        ? Number(it.normalPrice)
+        : (it.netPrice !== undefined && it.netPrice !== null ? Number(it.netPrice) : Number(it.price || 0));
+      const qty = Number(it.quantity) || 1;
+      return total + (normal * qty);
+    }, 0);
+    if (sum > 0) return sum;
+  }
+  if (order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null && Number(order.sellerItemsNetTotal) > 0) {
+    return Number(order.sellerItemsNetTotal);
+  }
+  if (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0) {
+    return Number(order.totalAmountWithoutCommissions);
+  }
+  return Number(order.totalAmount) || 0;
+};
+
+const buildOrderTotalsMap = (orders = []) => {
+  const map = new Map();
+  (orders || []).forEach(order => {
+    const total = getSellerOrderCanonicalTotal(order);
+    if (order._id) map.set(String(order._id), total);
+    if (order.orderNumber !== undefined && order.orderNumber !== null) {
+      map.set(String(order.orderNumber), total);
+      map.set(Number(order.orderNumber), total);
+      map.set(`#${String(order.orderNumber).padStart(5, '0')}`, total);
+    }
+    if (order.orderRef) map.set(String(order.orderRef), total);
+  });
+  return map;
+};
+
+const consolidateClientRows = (rawRows = [], orderTotalsMap = null) => {
   const orderMap = new Map();
   const nonOrderRows = [];
 
@@ -496,14 +537,6 @@ const consolidateClientRows = (rawRows = []) => {
       if (row.details?.returnItems?.length) entry.details.returnItems = row.details.returnItems;
       if (row.details?.paymentStatus) entry.paymentStatus = row.details.paymentStatus;
       if (row.details?.paymentMethod) entry.paymentMethod = row.details.paymentMethod;
-      // Ensure the canonical order total from Seller Orders page is preserved
-      if (row.details?.orderTotal !== undefined && row.details.orderTotal !== null) {
-        entry.amount = row.details.orderTotal;
-      } else if (row.activityType === 'orders' && row.amount !== null && row.amount !== undefined) {
-        entry.amount = row.amount;
-      } else if (entry.amount === null || entry.amount === undefined) {
-        entry.amount = row.amount;
-      }
       if (row.items?.length && (!entry.items || !entry.items.length)) entry.items = row.items;
       if (row.activities?.length) {
         row.activities.forEach(a => {
@@ -547,7 +580,66 @@ const consolidateClientRows = (rawRows = []) => {
     if (!entry.items && entry.details?.items) {
       entry.items = entry.details.items;
     }
+
+    // Determine canonical seller total WITHOUT commission
+    let canonicalTotal = null;
+    if (orderTotalsMap) {
+      if (entry.orderId && orderTotalsMap.has(String(entry.orderId))) {
+        canonicalTotal = orderTotalsMap.get(String(entry.orderId));
+      } else if (entry.referenceId && orderTotalsMap.has(String(entry.referenceId))) {
+        canonicalTotal = orderTotalsMap.get(String(entry.referenceId));
+      } else if (entry.referenceId) {
+        const cleanRef = String(entry.referenceId).replace('#', '').replace(/^0+/, '');
+        if (cleanRef && orderTotalsMap.has(cleanRef)) {
+          canonicalTotal = orderTotalsMap.get(cleanRef);
+        }
+      }
+    }
+
+    if (canonicalTotal === null || canonicalTotal === undefined) {
+      const itemsList = entry.items || entry.details?.items || [];
+      if (itemsList.length > 0) {
+        const itemSum = itemsList.reduce((sum, it) => {
+          if (it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0) {
+            return sum + Number(it.totalSellerAmount);
+          }
+          const unit = it.normalPrice !== undefined && it.normalPrice !== null
+            ? Number(it.normalPrice)
+            : (it.netPrice !== undefined && it.netPrice !== null ? Number(it.netPrice) : (it.unitPrice !== undefined ? Number(it.unitPrice) : Number(it.price || 0)));
+          const qty = Number(it.quantity) || 1;
+          return sum + (unit * qty);
+        }, 0);
+        if (itemSum > 0) {
+          canonicalTotal = itemSum;
+        }
+      }
+    }
+
+    if (canonicalTotal === null || canonicalTotal === undefined) {
+      if (entry.details?.orderTotal !== undefined && entry.details.orderTotal !== null) {
+        canonicalTotal = entry.details.orderTotal;
+      } else {
+        const validAmounts = entry.activities
+          .map(a => Number(a.amount))
+          .filter(a => Number.isFinite(a) && a > 0);
+        if (validAmounts.length > 0) {
+          canonicalTotal = Math.min(...validAmounts);
+        } else {
+          canonicalTotal = entry.amount;
+        }
+      }
+    }
+
+    entry.amount = canonicalTotal;
+    if (entry.details) {
+      entry.details.orderTotal = canonicalTotal;
+      entry.details.paymentAmount = canonicalTotal;
+    }
+    entry.activities.forEach(a => {
+      a.amount = canonicalTotal;
+    });
   }
+
   for (const entry of nonOrderRows) {
     entry.categories = Array.from(entry.categories);
   }
@@ -695,20 +787,25 @@ const History = () => {
           }
           return;
         }
-        const { data } = await api.get('/sellers/history', {
-          params: {
-            search: debouncedSearch,
-            startDate: activeFilters.startDate || undefined,
-            endDate: activeFilters.endDate || undefined,
-            status: activeFilters.status || undefined,
-            activityType: category,
-            page: pagination.currentPage,
-            limit: pagination.limit
-          },
-          signal: controller.signal
-        });
+        const [historyRes, ordersRes] = await Promise.all([
+          api.get('/sellers/history', {
+            params: {
+              search: debouncedSearch,
+              startDate: activeFilters.startDate || undefined,
+              endDate: activeFilters.endDate || undefined,
+              status: activeFilters.status || undefined,
+              activityType: category,
+              page: pagination.currentPage,
+              limit: pagination.limit
+            },
+            signal: controller.signal
+          }),
+          api.get('/sellers/orders', { signal: controller.signal }).catch(() => ({ data: [] }))
+        ]);
+        const data = historyRes.data;
+        const orderTotalsMap = buildOrderTotalsMap(Array.isArray(ordersRes.data) ? ordersRes.data : []);
         const incoming = Array.isArray(data.data) ? data.data : [];
-        const consolidatedData = consolidateClientRows(incoming);
+        const consolidatedData = consolidateClientRows(incoming, orderTotalsMap);
         setRows(consolidatedData);
         setCounts(data.counts || {});
         setStatuses(Array.isArray(data.statuses) ? data.statuses : []);
@@ -758,7 +855,15 @@ const History = () => {
           params: { id: selected.id },
           signal: controller.signal
         });
-        setDetailData(data.data);
+        const detailsPayload = data.data;
+        if (detailsPayload && selected.amount !== null && selected.amount !== undefined) {
+          if (detailsPayload.activity) detailsPayload.activity.amount = selected.amount;
+          if (detailsPayload.details) {
+            detailsPayload.details.orderTotal = selected.amount;
+            detailsPayload.details.paymentAmount = selected.amount;
+          }
+        }
+        setDetailData(detailsPayload);
       } catch (requestError) {
         if (!controller.signal.aborted) {
           const errMsg = requestError.response?.data?.message || 'Unable to load activity details.';
@@ -871,14 +976,18 @@ const History = () => {
         limit: Math.max(legacyRows.length, 1)
       }).categoryRows;
     }
-    const first = await api.get('/sellers/history', { params: { ...queryParams, page: 1 } });
+    const [first, ordersRes] = await Promise.all([
+      api.get('/sellers/history', { params: { ...queryParams, page: 1 } }),
+      api.get('/sellers/orders').catch(() => ({ data: [] }))
+    ]);
     const result = Array.isArray(first.data.data) ? [...first.data.data] : [];
     const totalPages = first.data.pagination?.totalPages || 0;
     for (let page = 2; page <= totalPages; page += 1) {
       const { data } = await api.get('/sellers/history', { params: { ...queryParams, page } });
       if (Array.isArray(data.data)) result.push(...data.data);
     }
-    return consolidateClientRows(result);
+    const orderTotalsMap = buildOrderTotalsMap(Array.isArray(ordersRes.data) ? ordersRes.data : []);
+    return consolidateClientRows(result, orderTotalsMap);
   };
 
   const exportRows = async (format) => {
