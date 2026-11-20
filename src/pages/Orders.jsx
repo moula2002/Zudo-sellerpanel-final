@@ -334,10 +334,32 @@ const Orders = () => {
     fetchOrders();
   }, []);
 
+  const currentSellerId = (() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('zudo_seller_user') || '{}');
+      return u._id ? String(u._id) : '';
+    } catch {
+      return '';
+    }
+  })();
+
   const fetchOrders = async () => {
     try {
       const { data } = await api.get('/sellers/orders');
-      setOrders(data);
+      const orderList = Array.isArray(data) ? data : [];
+      // Defensively ensure each order only contains this seller's products
+      const sanitized = currentSellerId
+        ? orderList.map(order => {
+            if (!order.items) return order;
+            const ownItems = order.items.filter(item => {
+              const itemSellerId = item.seller?.sellerId || item.sellerId;
+              return !itemSellerId || String(itemSellerId) === currentSellerId;
+            });
+            return { ...order, items: ownItems };
+          }).filter(order => order.items && order.items.length > 0)
+        : orderList;
+
+      setOrders(sanitized);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
     } finally {
@@ -347,7 +369,7 @@ const Orders = () => {
 
   const filteredOrders = orders.filter(order => {
     const formattedId = formatOrderNumber(order);
-    const orderIdStr = order.orderNumber ? String(order.orderNumber) : (order.orderId || order._id.slice(-6).toUpperCase());
+    const orderIdStr = order.orderNumber ? String(order.orderNumber) : (order.orderId || (order._id ? String(order._id).slice(-6).toUpperCase() : ''));
     const customerName = order.userId?.name || 'Guest';
     const matchesSearch = formattedId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       orderIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
