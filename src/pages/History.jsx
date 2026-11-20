@@ -12,11 +12,12 @@ const HISTORY_API_ENABLED = import.meta.env.VITE_SELLER_HISTORY_API_ENABLED !== 
 const categories = [
   { id: 'all', label: 'All Activities' },
   { id: 'orders', label: 'Orders' },
+  { id: 'delivered', label: 'Delivered' },
+  { id: 'pickups', label: 'Pickup' },
+  { id: 'returns', label: 'Returned' },
   { id: 'payments', label: 'Payments' },
   { id: 'invoices', label: 'Invoices' },
-  { id: 'returns', label: 'Returns' },
-  { id: 'pickups', label: 'Pickups' },
-  { id: 'statusUpdates', label: 'Order Status Updates' }
+  { id: 'statusUpdates', label: 'Status Updates' }
 ];
 
 const dateValue = (date) => {
@@ -72,7 +73,20 @@ const getHistoryErrorMessage = (error, fallback = false) => {
   return error.response.data?.message || 'Unable to load business history. Please try again.';
 };
 
-const idString = (value) => value?._id?.toString() || value?.toString() || '';
+const idString = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'object') {
+    if (value._id) return idString(value._id);
+    if (value.id) return idString(value.id);
+    if (value.sellerId) return idString(value.sellerId);
+    if (typeof value.toString === 'function') {
+      const str = value.toString();
+      if (str && str !== '[object Object]') return str.trim();
+    }
+  }
+  return '';
+};
 
 const validTimestamp = (...values) => {
   for (const value of values) {
@@ -105,18 +119,20 @@ const toLegacyItem = (item) => {
 };
 
 const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, returns }) => {
-  const sellerId = idString(seller);
-  const productIds = new Set((products || []).map(product => idString(product._id)).filter(Boolean));
+  const sellerId = idString(seller) || idString(getSellerFromStorage());
+  const productIds = new Set((products || []).map(product => idString(product._id || product.id)).filter(Boolean));
   const pickupByOrderId = new Map((pickups || []).map(pickup => [
     idString(pickup.orderId || pickup._id),
     pickup
   ]));
   const returnByOrderId = new Map((returns || []).map(order => [idString(order._id), order]));
   const sellerOrders = (orders || []).map(order => {
-    const items = (order.items || []).filter(item =>
-      idString(item.seller?.sellerId || item.sellerId) === sellerId ||
-      (item.productId && productIds.has(idString(item.productId)))
-    );
+    const items = (order.items || []).filter(item => {
+      const itemSellerId = idString(item.seller?.sellerId || item.sellerId || item.seller?._id || item.seller);
+      const itemPid = idString(item.productId);
+      return (itemSellerId && itemSellerId === sellerId) ||
+             (itemPid && productIds.has(itemPid));
+    });
     if (!items.length) return null;
 
     const customer = {
@@ -145,7 +161,7 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
     const pickupRecord = pickupByOrderId.get(orderId);
     const orderPickups = embeddedPickups.length
       ? embeddedPickups
-      : pickupRecord
+      : ((!order.sellerPickups || order.sellerPickups.length === 0) && pickupRecord
         ? [{
           id: pickupRecord.pickupId || idString(pickupRecord._id),
           status: pickupRecord.status || pickupRecord.orderStatus || '',
@@ -155,7 +171,7 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
             ? { name: pickupRecord.driver.name || '', phone: pickupRecord.driver.phone || '' }
             : null
         }]
-        : [];
+        : []);
     const details = {
       orderId,
       referenceId,
@@ -205,22 +221,53 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
     });
 
     details.pickup.forEach((pickup, index) => {
+      const isPickedUp = pickup.status === 'Picked Up' || pickup.status === 'Delivered' || order.orderStatus === 'Picked Up' || order.orderStatus === 'Delivered';
+      const isOutForDelivery = pickup.status === 'Out for Delivery' || order.orderStatus === 'Out for Delivery';
+      const isScheduled = Boolean(pickup.scheduledDate);
+      if (isPickedUp || isOutForDelivery || isScheduled) {
+        const pickupTitle = isPickedUp
+          ? 'Order Picked Up'
+          : isOutForDelivery
+            ? 'Pickup Dispatched'
+            : 'Pickup Scheduled';
+
+        add({
+          id: `fallback:pickup:${orderId}:${pickup.id || index}`,
+          activityType: 'pickups',
+          activity: pickupTitle,
+          occurredAt: validTimestamp(pickup.scheduledDate, order.updatedAt, occurredAt),
+          referenceId,
+          customer,
+          description: `Pickup record; status: ${pickup.status || order.orderStatus}${pickup.pickupCode ? `; Code: ${pickup.pickupCode}` : ''}`,
+          amount,
+          status: pickup.status || order.orderStatus,
+          source: 'order',
+          recordId: orderId,
+          orderId,
+          details: { ...details, order: details }
+        });
+      }
+    });
+
+    const isDelivered = order.orderStatus === 'Delivered' || Boolean(order.deliveredAt);
+    if (isDelivered) {
+      const deliveryDate = validTimestamp(order.deliveredAt, order.updatedAt, order.createdAt);
       add({
-        id: `fallback:pickup:${orderId}:${pickup.id || index}`,
-        activityType: 'pickups',
-        activity: pickup.scheduledDate ? 'Pickup Scheduled' : 'Pickup Record Created',
-        occurredAt: validTimestamp(pickup.scheduledDate, occurredAt),
+        id: `fallback:delivered:${orderId}`,
+        activityType: 'delivered',
+        activity: 'Order Delivered',
+        occurredAt: deliveryDate,
         referenceId,
         customer,
-        description: `Pickup record${pickup.status ? `; current status: ${pickup.status}` : ''}`,
+        description: 'Order delivery confirmed',
         amount,
-        status: pickup.status,
+        status: 'Delivered',
         source: 'order',
         recordId: orderId,
         orderId,
         details: { ...details, order: details }
       });
-    });
+    }
 
     const paymentStatus = String(order.paymentStatus || '').toLowerCase();
     const collectionStatus = String(order.codCollectionStatus || '').toLowerCase();
@@ -239,52 +286,35 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
         customer,
         description: `${order.paymentMethod || 'Payment'} payment received for order`,
         amount,
-        status: order.paymentStatus,
+        status: order.paymentStatus || 'Completed',
         source: 'order',
         recordId: orderId,
         orderId,
         details: { ...details, transactionId: details.transactionId, order: details }
       });
-    } else if (paymentStatus === 'pending' && !paymentReceived && occurredAt) {
-      add({
-        id: `fallback:payment-pending:${orderId}`,
-        activityType: 'payments',
-        activity: 'Payment Pending',
-        occurredAt,
-        referenceId,
-        customer,
-        description: `${order.paymentMethod || 'Payment'} payment pending for order`,
-        amount,
-        status: order.paymentStatus,
-        source: 'order',
-        recordId: orderId,
-        orderId,
-        details: { ...details, order: details }
-      });
     }
 
-    [
-      ['Order Delivered', order.deliveredAt],
-      ['Order Cancelled', order.cancelledAt]
-    ].forEach(([activity, date]) => {
-      const eventDate = validTimestamp(date);
-      if (!eventDate) return;
-      add({
-        id: `fallback:status:${orderId}:${activity}`,
-        activityType: 'statusUpdates',
-        activity,
-        occurredAt: eventDate,
-        referenceId,
-        customer,
-        description: activity === 'Order Cancelled' ? order.cancellationReason || activity : 'Order delivery confirmed',
-        amount,
-        status: order.orderStatus || '',
-        source: 'order',
-        recordId: orderId,
-        orderId,
-        details: { ...details, order: details }
-      });
-    });
+    if (order.cancelledAt || order.orderStatus === 'Cancelled' || order.orderStatus === 'Rejected by Seller') {
+      const cancelDate = validTimestamp(order.cancelledAt, order.updatedAt);
+      if (cancelDate) {
+        const isRejected = order.orderStatus === 'Rejected by Seller';
+        add({
+          id: `fallback:status:${orderId}:${order.orderStatus}`,
+          activityType: 'statusUpdates',
+          activity: isRejected ? 'Order Rejected by Seller' : 'Order Cancelled',
+          occurredAt: cancelDate,
+          referenceId,
+          customer,
+          description: order.cancellationReason || (isRejected ? 'Rejected by seller' : 'Order cancelled'),
+          amount,
+          status: order.orderStatus || 'Cancelled',
+          source: 'order',
+          recordId: orderId,
+          orderId,
+          details: { ...details, order: details }
+        });
+      }
+    }
 
     const returnRecord = returnByOrderId.get(orderId);
     const returnItems = returnRecord?.items?.length
@@ -295,11 +325,11 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
       ['Return Approved', order.returnApprovedAt || returnRecord?.returnApprovedAt],
       ['Return Rejected', order.returnRejectedAt || returnRecord?.returnRejectedAt]
     ].filter(([, date]) => date);
-    if (!returnDates.length && returnItems.length) {
-      returnDates.push(['Return Status (current)', null]);
+    if (!returnDates.length && (returnItems.length || ['Return Requested', 'Return Approved', 'Return Rejected', 'Returned', 'Partially Returned'].includes(order.orderStatus) || order.returnStatus)) {
+      returnDates.push([order.returnStatus || (returnItems[0] && returnItems[0].returnStatus) || 'Return Requested', order.updatedAt || order.createdAt]);
     }
     returnDates.forEach(([activity, date], index) => {
-      const eventDate = validTimestamp(date);
+      const eventDate = validTimestamp(date, order.updatedAt, occurredAt);
       add({
         id: `fallback:return:${orderId}:${activity}:${index}`,
         activityType: 'returns',
@@ -396,7 +426,7 @@ const filterLegacyHistory = (sourceRows, { search, startDate, endDate, status, a
     ].filter(Boolean).join(' ').toLowerCase();
     return text.includes(needle);
   });
-  const counts = { all: searchedRows.length, orders: 0, payments: 0, invoices: 0, returns: 0, pickups: 0, statusUpdates: 0 };
+  const counts = { all: searchedRows.length, orders: 0, delivered: 0, payments: 0, invoices: 0, returns: 0, pickups: 0, statusUpdates: 0 };
   searchedRows.forEach(row => {
     if (Object.prototype.hasOwnProperty.call(counts, row.activityType)) counts[row.activityType] += 1;
   });
@@ -459,9 +489,13 @@ const History = () => {
         if (!Array.isArray(response.data)) throw new Error(`${label} API returned an invalid response.`);
         return response.data;
       };
-      if (!idString(sellerResponse.data)) throw new Error('Seller profile API returned an invalid response.');
+      const storedSeller = getSellerFromStorage();
+      const resolvedSeller = (sellerResponse.data && idString(sellerResponse.data))
+        ? sellerResponse.data
+        : storedSeller;
+      if (!idString(resolvedSeller)) throw new Error('Seller profile could not be verified.');
       return buildLegacyHistory({
-        seller: sellerResponse.data,
+        seller: resolvedSeller,
         products: getList(productsResponse, 'Products'),
         orders: getList(ordersResponse, 'Orders'),
         invoices: getList(invoicesResponse, 'Invoices'),
