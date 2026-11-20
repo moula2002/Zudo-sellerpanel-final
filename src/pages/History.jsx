@@ -448,7 +448,7 @@ const consolidateClientRows = (rawRows = []) => {
       }
 
       if (row.activityType) entry.categories.add(row.activityType);
-      if (row.status === 'Delivered' || row.activity === 'Order Delivered' || row.activityType === 'delivered') {
+      if (row.activityType === 'delivered' || row.activity === 'Order Delivered' || row.details?.orderStatus === 'Delivered' || (row.status === 'Delivered' && row.activityType === 'orders')) {
         entry.categories.add('delivered');
       }
       if (row.activityType === 'pickups' || (row.activity && row.activity.toLowerCase().includes('pickup'))) {

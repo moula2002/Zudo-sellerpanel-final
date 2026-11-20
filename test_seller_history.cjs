@@ -672,6 +672,154 @@ assert.strictEqual(countsAfterDelete.invoices, 0, 'Invoices tab has 0 records af
 console.log('  [PASS] Admin order deletion completely removes all corresponding order, delivery, pickup, payment, and invoice records from seller history');
 console.log('  [PASS] No orphaned or outdated records remain in any seller history tab');
 
+// =============================================================
+// TEST 9: CONSOLIDATED ORDER HISTORY & TABS (DELIVERED, PICKUP, RETURNED)
+// =============================================================
+console.log('\nTEST 9: Consolidated Order History & Relevant Categories/Tabs...');
+
+const consolidateHistory = (rawRows = []) => {
+  const orderMap = new Map();
+  const nonOrderRows = [];
+
+  for (const row of rawRows) {
+    if (row.orderId) {
+      if (!orderMap.has(row.orderId)) {
+        orderMap.set(row.orderId, {
+          id: `order:${row.orderId}`,
+          orderId: row.orderId,
+          referenceId: row.referenceId,
+          customer: row.customer || {},
+          occurredAt: row.occurredAt,
+          createdAt: row.createdAt || row.details?.createdAt || row.occurredAt,
+          description: row.description,
+          amount: row.amount,
+          status: row.status,
+          paymentStatus: row.details?.paymentStatus || '',
+          paymentMethod: row.details?.paymentMethod || '',
+          activityType: 'orders',
+          activity: 'Order Record',
+          details: { ...(row.details || {}) },
+          activities: [],
+          categories: new Set(['orders', 'all'])
+        });
+      }
+      const entry = orderMap.get(row.orderId);
+
+      entry.activities.push({
+        id: row.id,
+        activity: row.activity,
+        activityType: row.activityType,
+        occurredAt: row.occurredAt,
+        status: row.status,
+        description: row.description,
+        amount: row.amount,
+        details: row.details
+      });
+
+      if (row.activityType) entry.categories.add(row.activityType);
+      if (row.activityType === 'delivered' || row.activity === 'Order Delivered' || row.details?.orderStatus === 'Delivered' || (row.status === 'Delivered' && row.activityType === 'orders')) {
+        entry.categories.add('delivered');
+      }
+      if (row.activityType === 'pickups' || (row.activity && row.activity.toLowerCase().includes('pickup'))) {
+        entry.categories.add('pickups');
+      }
+      if (row.activityType === 'returns' || (row.activity && row.activity.toLowerCase().includes('return'))) {
+        entry.categories.add('returns');
+      }
+      if (row.activityType === 'payments' || ['Paid', 'Completed'].includes(row.details?.paymentStatus)) {
+        entry.categories.add('payments');
+      }
+      if (row.activityType === 'invoices' || row.details?.invoiceReferences?.length) {
+        entry.categories.add('invoices');
+      }
+      if (row.activityType === 'statusUpdates' || ['Cancelled', 'Rejected by Seller'].includes(row.status)) {
+        entry.categories.add('statusUpdates');
+      }
+
+      if (new Date(row.occurredAt).getTime() > new Date(entry.occurredAt).getTime()) {
+        entry.occurredAt = row.occurredAt;
+      }
+      if (row.details?.items?.length) entry.details.items = row.details.items;
+      if (row.details?.orderStatus) entry.status = row.details.orderStatus;
+      else if (row.status && row.activityType === 'orders') entry.status = row.status;
+      if (row.details?.pickup?.length) entry.details.pickup = row.details.pickup;
+      if (row.details?.driver) entry.details.driver = row.details.driver;
+      if (row.details?.invoiceReferences?.length) entry.details.invoiceReferences = row.details.invoiceReferences;
+      if (row.details?.returnItems?.length) entry.details.returnItems = row.details.returnItems;
+      if (row.details?.paymentStatus) entry.paymentStatus = row.details.paymentStatus;
+      if (row.details?.paymentMethod) entry.paymentMethod = row.details.paymentMethod;
+    } else {
+      nonOrderRows.push({
+        ...row,
+        activities: [row],
+        categories: new Set([row.activityType || 'all', 'all'])
+      });
+    }
+  }
+
+  for (const entry of orderMap.values()) {
+    entry.activities.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+    entry.categories = Array.from(entry.categories);
+  }
+  for (const entry of nonOrderRows) {
+    entry.categories = Array.from(entry.categories);
+  }
+
+  return [...orderMap.values(), ...nonOrderRows];
+};
+
+const consolidatedOrders = consolidateHistory(historyRows);
+
+// 1. Verify consolidation to single row per order
+assert.strictEqual(consolidatedOrders.length, 4, '12 raw activity records must consolidate to exactly 4 distinct order records');
+const distinctOrderIds = new Set(consolidatedOrders.map(o => o.orderId));
+assert.strictEqual(distinctOrderIds.size, 4, 'All 4 consolidated records must have distinct orderIds (zero duplicate rows)');
+console.log('  [PASS] Single Consolidated Order Records: Exactly 4 orders displayed on the main page (12 raw records consolidated, 0 duplicates)');
+
+// 2. Test All Orders tab
+const allTabOrders = consolidatedOrders.filter(o => o.categories.includes('all'));
+assert.strictEqual(allTabOrders.length, 4, 'All tab must display all 4 consolidated orders');
+console.log('  [PASS] All Orders Tab: Displays 4 consolidated orders (#00201, #00202, #00203, #00204)');
+
+// 3. Test Delivered Tab
+const deliveredOrders = consolidatedOrders.filter(o => o.categories.includes('delivered'));
+assert.strictEqual(deliveredOrders.length, 1, 'Delivered tab must have exactly 1 consolidated order (#00202)');
+const delOrder = deliveredOrders[0];
+assert.strictEqual(delOrder.referenceId, '#00202');
+assert.strictEqual(delOrder.status, 'Delivered');
+assert.strictEqual(delOrder.customer.name, 'Bhavna Reddy');
+assert.strictEqual(delOrder.amount, 1800);
+// Check that complete order activity timeline is attached to the delivered order
+assert(delOrder.activities.length >= 4, 'Delivered order must retain all its activity milestones');
+assert(delOrder.activities.some(a => a.activity === 'Order Delivered'), 'Timeline must include Order Delivered event');
+assert(delOrder.activities.some(a => a.activity === 'Order Picked Up'), 'Timeline must include Order Picked Up event');
+assert(delOrder.activities.some(a => a.activity === 'Payment Received'), 'Timeline must include Payment Received event');
+console.log('  [PASS] Delivered Tab: Correctly isolates delivered order #00202 (₹1,800, Bhavna Reddy) with complete 5-milestone activity timeline');
+
+// 4. Test Pickup Tab
+const pickupOrders = consolidatedOrders.filter(o => o.categories.includes('pickups'));
+assert.strictEqual(pickupOrders.length, 2, 'Pickup tab must have exactly 2 consolidated orders (#00202 and #00203)');
+assert(pickupOrders.some(o => o.referenceId === '#00202'), 'Order #00202 must be in Pickup tab');
+assert(pickupOrders.some(o => o.referenceId === '#00203'), 'Order #00203 must be in Pickup tab');
+assert(!pickupOrders.some(o => o.referenceId === '#00201'), 'Unscheduled pending order #00201 must not be in Pickup tab');
+// Verify pickup codes
+const p202 = pickupOrders.find(o => o.referenceId === '#00202');
+assert(p202.details.pickup.some(p => p.pickupCode === 'PU-202'), 'Order #00202 pickup code PU-202 must be present');
+const p203 = pickupOrders.find(o => o.referenceId === '#00203');
+assert(p203.details.pickup.some(p => p.pickupCode === 'PU-203'), 'Order #00203 pickup code PU-203 must be present');
+console.log('  [PASS] Pickup Tab: Correctly isolates orders #00202 & #00203 with valid pickup codes PU-202 & PU-203, excluding unscheduled pending orders');
+
+// 5. Test Returned Tab
+const returnedOrders = consolidatedOrders.filter(o => o.categories.includes('returns'));
+assert.strictEqual(returnedOrders.length, 1, 'Returned tab must have exactly 1 consolidated order (#00203)');
+const retOrder = returnedOrders[0];
+assert.strictEqual(retOrder.referenceId, '#00203');
+assert.strictEqual(retOrder.customer.name, 'Chetan Rao');
+assert(retOrder.activities.some(a => a.activity === 'Return Requested'), 'Timeline must include Return Requested');
+assert(retOrder.activities.some(a => a.activity === 'Return Approved'), 'Timeline must include Return Approved');
+assert(retOrder.activities.some(a => a.description.includes('Damaged seal during transit')), 'Timeline must include return reason');
+console.log('  [PASS] Returned Tab: Correctly isolates order #00203 (Chetan Rao) with return reason "Damaged seal during transit" and both return milestones');
+
 console.log('\n================================================================');
 console.log('            ALL SELLER HISTORY TESTS PASSED!                    ');
 console.log('================================================================');
