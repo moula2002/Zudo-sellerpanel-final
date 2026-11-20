@@ -411,6 +411,14 @@ const consolidateClientRows = (rawRows = []) => {
 
   for (const row of rawRows) {
     if (row.orderId) {
+      // Must have valid reference, customer, or items - never accept empty ghost records from deleted orders
+      const hasValidReference = Boolean(row.referenceId && row.referenceId !== '—');
+      const hasCustomer = Boolean(row.customer?.name && row.customer.name.trim());
+      const hasItems = Boolean(row.details?.items && row.details.items.length > 0);
+      if (!hasValidReference && !hasCustomer && !hasItems) {
+        continue;
+      }
+
       if (!orderMap.has(row.orderId)) {
         orderMap.set(row.orderId, {
           id: `order:${row.orderId}`,
@@ -488,6 +496,10 @@ const consolidateClientRows = (rawRows = []) => {
         });
       }
     } else {
+      // Non-order records must have a valid reference and cannot be orphaned order activities (status updates / pickups)
+      if (!row.referenceId || row.referenceId === '—' || ['statusUpdates', 'pickups'].includes(row.activityType)) {
+        continue;
+      }
       nonOrderRows.push({
         ...row,
         activities: [{
@@ -504,7 +516,15 @@ const consolidateClientRows = (rawRows = []) => {
     }
   }
 
-  for (const entry of orderMap.values()) {
+  // Filter out any orphaned orders that lack reference, customer, and items
+  const validOrderRows = Array.from(orderMap.values()).filter(order => {
+    const hasValidReference = Boolean(order.referenceId && order.referenceId !== '—');
+    const hasCustomer = Boolean(order.customer?.name && order.customer.name.trim());
+    const hasItems = Boolean(order.details?.items && order.details.items.length > 0);
+    return hasValidReference || hasCustomer || hasItems;
+  });
+
+  for (const entry of validOrderRows) {
     entry.activities.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
     entry.categories = Array.from(entry.categories);
     if (!entry.items && entry.details?.items) {
@@ -515,7 +535,7 @@ const consolidateClientRows = (rawRows = []) => {
     entry.categories = Array.from(entry.categories);
   }
 
-  return [...orderMap.values(), ...nonOrderRows];
+  return [...validOrderRows, ...nonOrderRows];
 };
 
 const filterLegacyHistory = (sourceRows, { search, startDate, endDate, status, activityType, page, limit }) => {
@@ -724,7 +744,11 @@ const History = () => {
         setDetailData(data.data);
       } catch (requestError) {
         if (!controller.signal.aborted) {
-          setDetailError(requestError.response?.data?.message || 'Unable to load activity details.');
+          const errMsg = requestError.response?.data?.message || 'Unable to load activity details.';
+          setDetailError(errMsg);
+          if (requestError.response?.status === 404) {
+            setRetryKey(c => c + 1);
+          }
         }
       } finally {
         if (!controller.signal.aborted) setDetailLoading(false);

@@ -683,6 +683,14 @@ const consolidateHistory = (rawRows = []) => {
 
   for (const row of rawRows) {
     if (row.orderId) {
+      // Must have valid reference, customer, or items - never accept empty ghost records from deleted orders
+      const hasValidReference = Boolean(row.referenceId && row.referenceId !== '—');
+      const hasCustomer = Boolean(row.customer?.name && row.customer.name.trim());
+      const hasItems = Boolean(row.details?.items && row.details.items.length > 0);
+      if (!hasValidReference && !hasCustomer && !hasItems) {
+        continue;
+      }
+
       if (!orderMap.has(row.orderId)) {
         orderMap.set(row.orderId, {
           id: `order:${row.orderId}`,
@@ -749,6 +757,10 @@ const consolidateHistory = (rawRows = []) => {
       if (row.details?.paymentStatus) entry.paymentStatus = row.details.paymentStatus;
       if (row.details?.paymentMethod) entry.paymentMethod = row.details.paymentMethod;
     } else {
+      // Non-order records must have a valid reference and cannot be orphaned order activities (status updates / pickups)
+      if (!row.referenceId || row.referenceId === '—' || ['statusUpdates', 'pickups'].includes(row.activityType)) {
+        continue;
+      }
       nonOrderRows.push({
         ...row,
         activities: [row],
@@ -757,7 +769,15 @@ const consolidateHistory = (rawRows = []) => {
     }
   }
 
-  for (const entry of orderMap.values()) {
+  // Filter out any orphaned orders that lack reference, customer, and items
+  const validOrderRows = Array.from(orderMap.values()).filter(order => {
+    const hasValidReference = Boolean(order.referenceId && order.referenceId !== '—');
+    const hasCustomer = Boolean(order.customer?.name && order.customer.name.trim());
+    const hasItems = Boolean(order.details?.items && order.details.items.length > 0);
+    return hasValidReference || hasCustomer || hasItems;
+  });
+
+  for (const entry of validOrderRows) {
     entry.activities.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
     entry.categories = Array.from(entry.categories);
   }
@@ -765,7 +785,7 @@ const consolidateHistory = (rawRows = []) => {
     entry.categories = Array.from(entry.categories);
   }
 
-  return [...orderMap.values(), ...nonOrderRows];
+  return [...validOrderRows, ...nonOrderRows];
 };
 
 const consolidatedOrders = consolidateHistory(historyRows);
@@ -819,6 +839,45 @@ assert(retOrder.activities.some(a => a.activity === 'Return Requested'), 'Timeli
 assert(retOrder.activities.some(a => a.activity === 'Return Approved'), 'Timeline must include Return Approved');
 assert(retOrder.activities.some(a => a.description.includes('Damaged seal during transit')), 'Timeline must include return reason');
 console.log('  [PASS] Returned Tab: Correctly isolates order #00203 (Chetan Rao) with return reason "Damaged seal during transit" and both return milestones');
+
+// 6. Test Orphaned Record Exclusion (Deleted Order Cascade Handling)
+console.log('\n--- 10. TESTING ORPHANED EVENT FILTERING AFTER ORDER DELETION ---');
+const rawRowsWithOrphan = [
+  ...historyRows,
+  // Ghost row simulating an order deleted from orders collection but leaving orphaned status update
+  {
+    id: 'event:ghost1',
+    activityType: 'statusUpdates',
+    activity: 'Order Packed',
+    occurredAt: '2026-11-20T16:51:00Z',
+    referenceId: '',
+    customer: {},
+    description: 'Order status changed from Pending to Packed',
+    amount: 100500,
+    status: 'Packed',
+    orderId: 'deleted-order-999',
+    details: { order: null, items: [] }
+  },
+  {
+    id: 'event:ghost2',
+    activityType: 'pickups',
+    activity: 'Pickup Ready',
+    occurredAt: '2026-11-20T16:51:05Z',
+    referenceId: '',
+    customer: {},
+    description: 'Order packed and ready for pickup',
+    amount: 100500,
+    status: 'Packed',
+    orderId: 'deleted-order-999',
+    details: { order: null, items: [] }
+  }
+];
+
+const cleanedOrders = consolidateHistory(rawRowsWithOrphan);
+assert.strictEqual(cleanedOrders.length, 4, 'Orphaned events from deleted order-999 must NOT create a 5th ghost order row');
+assert(!cleanedOrders.some(o => o.orderId === 'deleted-order-999'), 'Deleted order-999 must not be present in consolidated orders');
+assert(!cleanedOrders.some(o => o.referenceId === '' || o.referenceId === '—'), 'Ghost orders with empty reference ID must be completely filtered out');
+console.log('  [PASS] Deleted Order Cleanup: 2 orphaned events for deleted order-999 (amount ₹1,00,500) were 100% excluded (0 ghost rows rendered)');
 
 console.log('\n================================================================');
 console.log('            ALL SELLER HISTORY TESTS PASSED!                    ');
