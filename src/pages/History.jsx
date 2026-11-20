@@ -473,8 +473,23 @@ const History = () => {
   }, [search]);
 
   useEffect(() => {
-    if (legacyRows !== null) return undefined;
+    const handleRefresh = () => {
+      setRetryKey(current => current + 1);
+    };
+    window.addEventListener('focus', handleRefresh);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleRefresh();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    const interval = window.setInterval(handleRefresh, 25000);
+    return () => {
+      window.removeEventListener('focus', handleRefresh);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.clearInterval(interval);
+    };
+  }, []);
 
+  useEffect(() => {
     const controller = new AbortController();
     const loadLegacyHistory = async () => {
       const [sellerResponse, productsResponse, ordersResponse, invoicesResponse, pickupsResponse, returnsResponse] = await Promise.all([
@@ -509,7 +524,10 @@ const History = () => {
       try {
         if (!HISTORY_API_ENABLED) {
           const legacyData = await loadLegacyHistory();
-          if (!controller.signal.aborted) setLegacyRows(legacyData);
+          if (!controller.signal.aborted) {
+            setLegacyRows(legacyData);
+            setSelected(current => (current && !legacyData.some(row => row.id === current.id || (row.orderId && row.orderId === current.orderId))) ? null : current);
+          }
           return;
         }
         const { data } = await api.get('/sellers/history', {
@@ -528,6 +546,7 @@ const History = () => {
         setCounts(data.counts || {});
         setStatuses(Array.isArray(data.statuses) ? data.statuses : []);
         setPagination(current => ({ ...current, ...(data.pagination || {}) }));
+        setSelected(current => (current && !data.data?.some(row => row.id === current.id || (row.orderId && row.orderId === current.orderId))) ? null : current);
       } catch (requestError) {
         if (!controller.signal.aborted) {
           if (HISTORY_API_ENABLED && requestError.response?.status === 404) {
@@ -535,6 +554,7 @@ const History = () => {
               const legacyData = await loadLegacyHistory();
               if (!controller.signal.aborted) {
                 setLegacyRows(legacyData);
+                setSelected(current => (current && !legacyData.some(row => row.id === current.id || (row.orderId && row.orderId === current.orderId))) ? null : current);
               }
             } catch (fallbackError) {
               if (!controller.signal.aborted) {
@@ -557,7 +577,7 @@ const History = () => {
     };
     loadHistory();
     return () => controller.abort();
-  }, [legacyRows, debouncedSearch, activeFilters, category, pagination.currentPage, pagination.limit, retryKey]);
+  }, [debouncedSearch, activeFilters, category, pagination.currentPage, pagination.limit, retryKey]);
 
   useEffect(() => {
     if (!selected) return undefined;

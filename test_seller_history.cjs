@@ -639,6 +639,39 @@ assert.strictEqual(seller100ExclusiveTest.length, 0, 'Seller 100 must have 0 his
 console.log('  [PASS] Details modal and related transactions contain zero foreign items or foreign pickup codes');
 console.log('  [PASS] Orders with zero items for a seller produce zero history records');
 
+// =============================================================
+// TEST 8: ADMIN ORDER DELETION CASCADES TO SELLER HISTORY
+// =============================================================
+console.log('\nTEST 8: Admin Order Deletion Cascade Removal from Seller History...');
+
+// Initially we have 4 orders (ord_1, ord_2, ord_3, ord_4) producing 12 records
+assert.strictEqual(historyRows.length, 12, 'Initial history count must be 12');
+
+// Admin deletes Order #202 (ord_2) which had 1 order event, 1 pickup event, 1 delivery event, 1 payment event, and 1 invoice
+const remainingOrdersAfterAdminDelete = mockOrders.filter(o => o._id !== 'ord_2');
+const remainingInvoicesAfterAdminDelete = mockInvoices.filter(inv => inv.orderId !== 'ord_2');
+
+const historyAfterDelete = buildHistory({
+  seller: mockSeller,
+  products: mockProducts,
+  orders: remainingOrdersAfterAdminDelete,
+  invoices: remainingInvoicesAfterAdminDelete
+});
+
+// Verify ord_2 is completely wiped out
+assert(!historyAfterDelete.some(r => r.orderId === 'ord_2' || r.referenceId === '#00202'),
+  'Deleted order ord_2 (#00202) must have ZERO entries in seller history');
+
+// Verify counts for remaining orders
+const { counts: countsAfterDelete } = filterHistory(historyAfterDelete, { activityType: 'all' });
+assert.strictEqual(countsAfterDelete.orders, 3, 'Orders count decreased from 4 to 3');
+assert.strictEqual(countsAfterDelete.delivered, 0, 'Delivered tab has 0 records after ord_2 deletion');
+assert.strictEqual(countsAfterDelete.payments, 0, 'Payments tab has 0 records after ord_2 deletion');
+assert.strictEqual(countsAfterDelete.invoices, 0, 'Invoices tab has 0 records after ord_2 deletion');
+
+console.log('  [PASS] Admin order deletion completely removes all corresponding order, delivery, pickup, payment, and invoice records from seller history');
+console.log('  [PASS] No orphaned or outdated records remain in any seller history tab');
+
 console.log('\n================================================================');
 console.log('            ALL SELLER HISTORY TESTS PASSED!                    ');
 console.log('================================================================');
