@@ -147,7 +147,14 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
       pincode: order.shippingAddress?.pincode || ''
     };
     const itemDetails = items.map(toLegacyItem);
-    const amount = itemDetails.reduce((total, item) => total + item.amount, 0);
+    const orderTotal = (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null)
+      ? Number(order.totalAmountWithoutCommissions)
+      : ((order.sellerTotalCustomerAmount !== undefined && order.sellerTotalCustomerAmount !== null)
+          ? Number(order.sellerTotalCustomerAmount)
+          : ((order.totalAmount !== undefined && order.totalAmount !== null)
+              ? Number(order.totalAmount)
+              : itemDetails.reduce((total, item) => total + item.amount, 0)));
+    const amount = orderTotal;
     const orderId = idString(order._id);
     const referenceId = getLegacyOrderReference(order);
     const embeddedPickups = (order.sellerPickups || [])
@@ -487,6 +494,14 @@ const consolidateClientRows = (rawRows = []) => {
       if (row.details?.returnItems?.length) entry.details.returnItems = row.details.returnItems;
       if (row.details?.paymentStatus) entry.paymentStatus = row.details.paymentStatus;
       if (row.details?.paymentMethod) entry.paymentMethod = row.details.paymentMethod;
+      // Ensure the canonical order total from Seller Orders page is preserved
+      if (row.details?.orderTotal !== undefined && row.details.orderTotal !== null) {
+        entry.amount = row.details.orderTotal;
+      } else if (row.activityType === 'orders' && row.amount !== null && row.amount !== undefined) {
+        entry.amount = row.amount;
+      } else if (entry.amount === null || entry.amount === undefined) {
+        entry.amount = row.amount;
+      }
       if (row.items?.length && (!entry.items || !entry.items.length)) entry.items = row.items;
       if (row.activities?.length) {
         row.activities.forEach(a => {
