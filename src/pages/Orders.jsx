@@ -50,20 +50,19 @@ const Orders = () => {
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const getOrderTotal = (order) => {
-    if (order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null && Number(order.sellerItemsNetTotal) > 0) {
-      return Number(order.sellerItemsNetTotal);
-    }
     if (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0) {
       return Number(order.totalAmountWithoutCommissions);
     }
+    if (order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null && Number(order.sellerItemsNetTotal) > 0) {
+      return Number(order.sellerItemsNetTotal);
+    }
     if (Array.isArray(order.items) && order.items.length > 0) {
       const sum = order.items.reduce((acc, it) => {
-        if (it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0) {
-          return acc + Number(it.totalSellerAmount);
-        }
-        const normal = Number(it.normalPrice ?? it.netPrice ?? it.price ?? 0);
-        const qty = Number(it.quantity) || 1;
-        return acc + (normal * qty);
+        const lineTotal = it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0
+          ? Number(it.totalSellerAmount)
+          : ((Number(it.normalPrice ?? it.netPrice ?? it.price ?? 0)) * (Number(it.quantity) || 1));
+        const lineGst = Number(it.gstAmount ?? it.totalGst ?? 0);
+        return acc + lineTotal + lineGst;
       }, 0);
       if (sum > 0) return sum;
     }

@@ -151,14 +151,11 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
       pincode: order.shippingAddress?.pincode || ''
     };
     const itemDetails = items.map(toLegacyItem);
-    const calculatedSellerOrderTotal = itemDetails.reduce((total, item) => total + item.amount, 0);
-    const orderTotal = calculatedSellerOrderTotal > 0
-      ? calculatedSellerOrderTotal
+    const orderTotal = (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0)
+      ? Number(order.totalAmountWithoutCommissions)
       : ((order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null && Number(order.sellerItemsNetTotal) > 0)
           ? Number(order.sellerItemsNetTotal)
-          : ((order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0)
-              ? Number(order.totalAmountWithoutCommissions)
-              : Number(order.totalAmount) || 0));
+          : itemDetails.reduce((total, item) => total + item.amount, 0));
     const amount = orderTotal;
     const orderId = idString(order._id);
     const referenceId = getLegacyOrderReference(order);
@@ -418,24 +415,21 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
 };
 
 const getSellerOrderCanonicalTotal = (order) => {
-  if (Array.isArray(order.items) && order.items.length > 0) {
-    const sum = order.items.reduce((total, it) => {
-      if (it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0) {
-        return total + Number(it.totalSellerAmount);
-      }
-      const normal = it.normalPrice !== undefined && it.normalPrice !== null
-        ? Number(it.normalPrice)
-        : (it.netPrice !== undefined && it.netPrice !== null ? Number(it.netPrice) : Number(it.price || 0));
-      const qty = Number(it.quantity) || 1;
-      return total + (normal * qty);
-    }, 0);
-    if (sum > 0) return sum;
+  if (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0) {
+    return Number(order.totalAmountWithoutCommissions);
   }
   if (order.sellerItemsNetTotal !== undefined && order.sellerItemsNetTotal !== null && Number(order.sellerItemsNetTotal) > 0) {
     return Number(order.sellerItemsNetTotal);
   }
-  if (order.totalAmountWithoutCommissions !== undefined && order.totalAmountWithoutCommissions !== null && Number(order.totalAmountWithoutCommissions) > 0) {
-    return Number(order.totalAmountWithoutCommissions);
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    const sum = order.items.reduce((total, it) => {
+      const lineTotal = it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0
+        ? Number(it.totalSellerAmount)
+        : ((Number(it.normalPrice ?? it.netPrice ?? it.price ?? 0)) * (Number(it.quantity) || 1));
+      const lineGst = Number(it.gstAmount ?? it.totalGst ?? 0);
+      return total + lineTotal + lineGst;
+    }, 0);
+    if (sum > 0) return sum;
   }
   return Number(order.totalAmount) || 0;
 };
@@ -597,36 +591,33 @@ const consolidateClientRows = (rawRows = [], orderTotalsMap = null) => {
     }
 
     if (canonicalTotal === null || canonicalTotal === undefined) {
-      const itemsList = entry.items || entry.details?.items || [];
-      if (itemsList.length > 0) {
-        const itemSum = itemsList.reduce((sum, it) => {
-          if (it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0) {
-            return sum + Number(it.totalSellerAmount);
+      if (entry.details?.orderTotal !== undefined && entry.details.orderTotal !== null && Number(entry.details.orderTotal) > 0) {
+        canonicalTotal = Number(entry.details.orderTotal);
+      } else {
+        const itemsList = entry.items || entry.details?.items || [];
+        if (itemsList.length > 0) {
+          const itemSum = itemsList.reduce((sum, it) => {
+            const lineTotal = it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0
+              ? Number(it.totalSellerAmount)
+              : ((Number(it.normalPrice ?? it.netPrice ?? it.price ?? 0)) * (Number(it.quantity) || 1));
+            const lineGst = Number(it.gstAmount ?? it.totalGst ?? it.taxAmount ?? 0);
+            return sum + lineTotal + lineGst;
+          }, 0);
+          if (itemSum > 0) {
+            canonicalTotal = itemSum;
           }
-          const unit = it.normalPrice !== undefined && it.normalPrice !== null
-            ? Number(it.normalPrice)
-            : (it.netPrice !== undefined && it.netPrice !== null ? Number(it.netPrice) : (it.unitPrice !== undefined ? Number(it.unitPrice) : Number(it.price || 0)));
-          const qty = Number(it.quantity) || 1;
-          return sum + (unit * qty);
-        }, 0);
-        if (itemSum > 0) {
-          canonicalTotal = itemSum;
         }
       }
     }
 
     if (canonicalTotal === null || canonicalTotal === undefined) {
-      if (entry.details?.orderTotal !== undefined && entry.details.orderTotal !== null) {
-        canonicalTotal = entry.details.orderTotal;
+      const validAmounts = entry.activities
+        .map(a => Number(a.amount))
+        .filter(a => Number.isFinite(a) && a > 0);
+      if (validAmounts.length > 0) {
+        canonicalTotal = Math.min(...validAmounts);
       } else {
-        const validAmounts = entry.activities
-          .map(a => Number(a.amount))
-          .filter(a => Number.isFinite(a) && a > 0);
-        if (validAmounts.length > 0) {
-          canonicalTotal = Math.min(...validAmounts);
-        } else {
-          canonicalTotal = entry.amount;
-        }
+        canonicalTotal = entry.amount;
       }
     }
 
@@ -725,12 +716,36 @@ const History = () => {
   const getResolvedItemPricing = (item, orderId, referenceId, orderTotal) => {
     if (!item) return { unitPrice: 0, amount: 0 };
     const qty = Number(item.quantity) || 1;
-
-    // 1. Look up canonical order from sellerOrdersMap (from /sellers/orders)
     const cleanRef = referenceId ? String(referenceId).replace('#', '').replace(/^0+/, '') : '';
     const canonicalOrder = (orderId && sellerOrdersMap.get(String(orderId))) ||
                            (referenceId && sellerOrdersMap.get(String(referenceId))) ||
                            (cleanRef && sellerOrdersMap.get(cleanRef));
+
+    const lineGst = Number(item.gstAmount ?? item.totalGst ?? item.taxAmount ?? 0);
+    const orderTotalNum = Number(orderTotal) || 0;
+
+    // Check if canonical order includes GST in its total
+    let includesGst = false;
+    if (canonicalOrder) {
+      const canonicalTotal = getSellerOrderCanonicalTotal(canonicalOrder);
+      const baseSum = (canonicalOrder.items || []).reduce((sum, it) => {
+        const lineBase = it.totalSellerAmount !== undefined && it.totalSellerAmount !== null && Number(it.totalSellerAmount) > 0
+          ? Number(it.totalSellerAmount)
+          : (Number(it.normalPrice ?? it.netPrice ?? it.price ?? 0) * (Number(it.quantity) || 1));
+        return sum + lineBase;
+      }, 0);
+      const gstSum = (canonicalOrder.items || []).reduce((sum, it) => sum + Number(it.gstAmount ?? it.totalGst ?? 0), 0);
+      if (Math.abs(canonicalTotal - (baseSum + gstSum)) < 1) {
+        includesGst = true;
+      }
+    } else if (orderTotalNum > 0) {
+      const lineBase = item.totalSellerAmount !== undefined && item.totalSellerAmount !== null && Number(item.totalSellerAmount) > 0
+        ? Number(item.totalSellerAmount)
+        : (Number(item.normalPrice ?? item.netPrice ?? item.price ?? 0) * qty);
+      if (Math.abs(orderTotalNum - (lineBase + lineGst)) < 1) {
+        includesGst = true;
+      }
+    }
 
     if (canonicalOrder && Array.isArray(canonicalOrder.items) && canonicalOrder.items.length > 0) {
       const matched = canonicalOrder.items.find(it =>
@@ -739,45 +754,42 @@ const History = () => {
       ) || (canonicalOrder.items.length === 1 ? canonicalOrder.items[0] : null);
 
       if (matched) {
+        const matchedGst = Number(matched.gstAmount ?? matched.totalGst ?? lineGst ?? 0);
         const normal = matched.normalPrice !== undefined && matched.normalPrice !== null
           ? Number(matched.normalPrice)
           : (matched.netPrice !== undefined && matched.netPrice !== null ? Number(matched.netPrice) : null);
 
-        const lineTotal = matched.totalSellerAmount !== undefined && matched.totalSellerAmount !== null && Number(matched.totalSellerAmount) > 0
+        const baseTotal = matched.totalSellerAmount !== undefined && matched.totalSellerAmount !== null && Number(matched.totalSellerAmount) > 0
           ? Number(matched.totalSellerAmount)
           : (normal !== null ? normal * qty : null);
 
-        if (normal !== null || lineTotal !== null) {
-          const finalLineTotal = lineTotal !== null ? lineTotal : (normal * qty);
-          const finalUnit = normal !== null ? normal : (finalLineTotal / qty);
-          return { unitPrice: finalUnit, amount: finalLineTotal };
+        if (baseTotal !== null) {
+          const finalTotal = includesGst ? (baseTotal + matchedGst) : baseTotal;
+          const finalUnit = finalTotal / qty;
+          return { unitPrice: finalUnit, amount: finalTotal };
         }
       }
     }
 
     // 2. Check item's own seller payout properties
-    if (item.normalPrice !== undefined && item.normalPrice !== null && Number(item.normalPrice) > 0) {
-      const normal = Number(item.normalPrice);
-      return { unitPrice: normal, amount: normal * qty };
-    }
-    if (item.netPrice !== undefined && item.netPrice !== null && Number(item.netPrice) > 0) {
-      const net = Number(item.netPrice);
-      return { unitPrice: net, amount: net * qty };
-    }
-    if (item.totalSellerAmount !== undefined && item.totalSellerAmount !== null && Number(item.totalSellerAmount) > 0) {
-      const total = Number(item.totalSellerAmount);
-      return { unitPrice: total / qty, amount: total };
+    const baseTotal = (item.totalSellerAmount !== undefined && item.totalSellerAmount !== null && Number(item.totalSellerAmount) > 0)
+      ? Number(item.totalSellerAmount)
+      : (item.normalPrice !== undefined && item.normalPrice !== null
+          ? Number(item.normalPrice) * qty
+          : (item.netPrice !== undefined && item.netPrice !== null ? Number(item.netPrice) * qty : null));
+
+    if (baseTotal !== null) {
+      const finalTotal = includesGst ? (baseTotal + lineGst) : baseTotal;
+      return { unitPrice: finalTotal / qty, amount: finalTotal };
     }
 
-    // 3. Fallback: if unitPrice or amount exceeds orderTotal (because of platform commission)
+    // 3. Fallback: single item order must equal orderTotal
+    if (orderTotalNum > 0) {
+      return { unitPrice: orderTotalNum / qty, amount: orderTotalNum };
+    }
+
     const currentUnit = Number(item.unitPrice ?? item.price ?? 0);
     const currentAmount = Number(item.amount ?? (currentUnit * qty));
-    const maxTotal = Number(orderTotal) || 0;
-
-    if (maxTotal > 0 && currentAmount > maxTotal) {
-      return { unitPrice: maxTotal / qty, amount: maxTotal };
-    }
-
     return { unitPrice: currentUnit, amount: currentAmount };
   };
 
