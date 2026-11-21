@@ -1,61 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
-import { Settings as SettingsIcon, User, Store, Phone, Building2, MapPin, Save, Loader2, Edit3, X } from 'lucide-react';
+import { User, Store, Phone, Mail, Building2, MapPin, Loader2, ShieldCheck, Lock, FileText, CheckCircle2 } from 'lucide-react';
 import Layout from '../components/Layout';
-import MapPicker from '../components/MapPicker';
 
-const InfoRow = ({ label, value, icon: Icon, color }) => (
-  <div style={{ display: 'flex', gap: '16px', padding: '12px 0', borderBottom: '1px solid var(--border-color)' }}>
-    <div style={{ color: color || 'var(--primary)', marginTop: '2px' }}><Icon size={18} /></div>
-    <div style={{ flex: 1 }}>
-      <div style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 600, marginBottom: '2px' }}>{label}</div>
-      <div style={{ fontSize: '15px', color: 'var(--text-main)', fontWeight: 500, lineHeight: 1.4 }}>{value || 'Not set'}</div>
+const InfoRow = ({ label, value, icon: Icon, color, badge }) => (
+  <div style={{ display: 'flex', gap: '16px', padding: '16px 0', borderBottom: '1px solid var(--border-color)', alignItems: 'flex-start' }}>
+    <div style={{
+      color: color || 'var(--primary)',
+      marginTop: '2px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '36px',
+      height: '36px',
+      borderRadius: '10px',
+      background: 'var(--glass-bg)',
+      border: '1px solid var(--border-color)',
+      flexShrink: 0
+    }}>
+      <Icon size={18} />
     </div>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: '15px', color: 'var(--text-main)', fontWeight: 500, lineHeight: 1.5, wordBreak: 'break-word' }}>
+        {value || <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>Not provided</span>}
+      </div>
+    </div>
+    {badge && (
+      <div style={{ alignSelf: 'center' }}>
+        {badge}
+      </div>
+    )}
   </div>
 );
 
 const Settings = () => {
   const [profile, setProfile] = useState(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    storeName: '',
-    billingAddress: '',
-    phone: '',
-    gstNumber: '',
-    panNumber: '',
-    pickupLocation: {
-      lat: 28.6139,
-      lng: 77.2090,
-      address: ''
-    }
-  });
   const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
-
-  const MAPS_API_KEY = 'AIzaSyDXn6KSA4exy08KiKicYZ53wCfs20__qWU';
 
   const fetchProfile = async () => {
     try {
+      setLoading(true);
       const res = await api.get('/sellers/me');
-      const data = res.data;
+      const data = res.data || {};
       const formattedData = {
         name: data.name || '',
         storeName: data.storeName || data.businessName || '',
         billingAddress: data.billingAddress || data.businessAddress || '',
         phone: data.phone || '',
+        email: data.email || '',
         gstNumber: data.gstNumber || '',
         panNumber: data.panNumber || '',
-        pickupLocation: data.pickupLocation || {
-          lat: 28.6139,
-          lng: 77.2090,
-          address: ''
-        }
+        isVerified: Boolean(data.isVerified),
+        status: data.status || 'Active',
+        pickupLocation: typeof data.pickupLocation === 'object' && data.pickupLocation !== null
+          ? data.pickupLocation
+          : { address: data.pickupLocation || data.billingAddress || data.businessAddress || '', lat: null, lng: null }
       };
       setProfile(formattedData);
-      setFormData(formattedData);
       setError(null);
     } catch (err) {
       console.error('Failed to fetch profile:', err);
@@ -69,38 +74,9 @@ const Settings = () => {
     fetchProfile();
   }, []);
 
-  const handleLocationSelect = (coords) => {
-    setFormData(prev => ({
-      ...prev,
-      billingAddress: coords.address || prev.billingAddress,
-      pickupLocation: {
-        ...prev.pickupLocation,
-        lat: coords.lat,
-        lng: coords.lng,
-        address: coords.address || prev.pickupLocation.address
-      }
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await api.put('/sellers/profile', formData);
-      setSuccess(true);
-      setIsEditing(false);
-      setProfile(formData);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      alert(err.response?.data?.error || 'Failed to update profile');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) return (
     <Layout>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
         <Loader2 className="animate-spin" size={40} color="#6366f1" />
       </div>
     </Layout>
@@ -108,143 +84,162 @@ const Settings = () => {
 
   if (error || !profile) return (
     <Layout>
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '18px', fontWeight: 600 }}>{error || 'Profile not found'}</div>
-        <button onClick={fetchProfile} className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }}>Retry</button>
+      <div style={{ padding: '60px 20px', textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
+        <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '18px', fontWeight: 600 }}>
+          {error || 'Profile not found'}
+        </div>
+        <button onClick={fetchProfile} className="btn-primary" style={{ width: 'auto', padding: '10px 24px', margin: '0 auto' }}>
+          Retry
+        </button>
       </div>
     </Layout>
   );
 
+  const pickupAddressText = profile.pickupLocation?.address || profile.billingAddress || 'Not set';
+  const hasCoordinates = profile.pickupLocation?.lat && profile.pickupLocation?.lng;
+
   return (
     <Layout>
-      <div style={{ maxWidth: '1000px' }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        {/* Header */}
         <header style={{
-          marginBottom: '40px',
+          marginBottom: '32px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
           flexWrap: 'wrap',
-          gap: '20px'
+          gap: '16px'
         }}>
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '8px', color: 'var(--text-main)' }}>Store Settings</h1>
-            <p style={{ color: 'var(--text-dim)' }}>View and manage your professional profile.</p>
+            <h1 style={{ fontSize: '28px', fontWeight: 800, marginBottom: '6px', color: 'var(--text-main)', letterSpacing: '-0.5px' }}>
+              Store Profile
+            </h1>
+            <p style={{ color: 'var(--text-dim)', fontSize: '14px' }}>
+              Verified store credentials, tax registration, and business details.
+            </p>
           </div>
-          {!isEditing ? (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="btn-primary"
-              style={{ padding: '12px 24px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid #6366f1', color: '#6366f1', width: 'auto' }}
-            >
-              <Edit3 size={18} />
-              <span>Edit Profile</span>
-            </button>
-          ) : (
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => {
-                  setIsEditing(false);
-                  setFormData(profile);
-                }}
-                className="btn-primary"
-                style={{ padding: '12px 24px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#ef4444', width: 'auto' }}
-              >
-                <X size={18} />
-                <span>Cancel</span>
-              </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              background: profile.isVerified ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+              border: profile.isVerified ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(234, 179, 8, 0.25)',
+              color: profile.isVerified ? '#16a34a' : '#ca8a04',
+              fontSize: '13px',
+              fontWeight: 600
+            }}>
+              <ShieldCheck size={16} />
+              <span>{profile.isVerified ? 'Verified Profile' : 'Verification Pending'}</span>
             </div>
-          )}
+
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              background: 'var(--glass-bg)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-dim)',
+              fontSize: '12px',
+              fontWeight: 500
+            }}>
+              <Lock size={13} />
+              <span>Read-Only</span>
+            </div>
+          </div>
         </header>
 
-        {success && (
-          <div style={{ padding: '16px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid #22c55e', color: '#22c55e', borderRadius: '12px', marginBottom: '24px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            ✓ Profile updated successfully!
+        {/* Read-Only Notice */}
+        <div style={{
+          padding: '16px 20px',
+          background: 'rgba(99, 102, 241, 0.05)',
+          border: '1px solid rgba(99, 102, 241, 0.18)',
+          borderRadius: '16px',
+          marginBottom: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '14px',
+          color: 'var(--text-main)',
+          fontSize: '13.5px',
+          lineHeight: 1.5
+        }}>
+          <Lock size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: 'var(--primary)' }}>Profile is locked:</strong> Seller profile and legal tax details (Store Name, Phone, GST, PAN, and pickup location) are officially verified and locked to maintain compliance. If you need to update any of your business details, please contact platform administration.
           </div>
-        )}
+        </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          {/* General Info */}
-          <div className="glass-card" style={{ padding: '32px', borderRadius: '24px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-main)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+          {/* General Business Info */}
+          <div className="glass-card" style={{ padding: '28px 32px', borderRadius: '20px' }}>
+            <h2 style={{ fontSize: '17px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-main)' }}>
               <User size={18} color="var(--primary)" />
-              Store Profile
+              Store & Identity Information
             </h2>
 
-            {isEditing ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Full Name</label>
-                  <input type="text" className="input-field" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Store Name</label>
-                  <input type="text" className="input-field" value={formData.storeName} onChange={e => setFormData({ ...formData, storeName: e.target.value })} required />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Phone Number</label>
-                  <input type="tel" className="input-field" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} required />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>GST Registration No</label>
-                  <input type="text" className="input-field" value={formData.gstNumber} onChange={e => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })} required />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>PAN Card No</label>
-                  <input type="text" className="input-field" value={formData.panNumber} onChange={e => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })} required />
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0 40px' }}>
-                <InfoRow label="Full Name" value={profile.name} icon={User} />
-                <InfoRow label="Store Name" value={profile.storeName} icon={Store} color="#8b5cf6" />
-                <InfoRow label="Phone Number" value={profile.phone} icon={Phone} color="#ec4899" />
-                <InfoRow label="GST Registration No" value={profile.gstNumber} icon={Store} color="#eab308" />
-                <InfoRow label="PAN Card No" value={profile.panNumber} icon={Store} color="#3b82f6" />
-              </div>
-            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0 40px' }}>
+              <InfoRow label="Seller / Contact Name" value={profile.name} icon={User} color="#6366f1" />
+              <InfoRow label="Store / Business Name" value={profile.storeName} icon={Store} color="#8b5cf6" />
+              <InfoRow label="Registered Phone" value={profile.phone} icon={Phone} color="#ec4899" />
+              <InfoRow label="Registered Email" value={profile.email} icon={Mail} color="#06b6d4" />
+              <InfoRow
+                label="GST Registration No"
+                value={profile.gstNumber}
+                icon={FileText}
+                color="#eab308"
+                badge={profile.gstNumber ? (
+                  <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 197, 94, 0.1)', color: '#16a34a', fontWeight: 600 }}>
+                    Registered
+                  </span>
+                ) : null}
+              />
+              <InfoRow
+                label="PAN Card No"
+                value={profile.panNumber}
+                icon={FileText}
+                color="#3b82f6"
+                badge={profile.panNumber ? (
+                  <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px', background: 'rgba(34, 197, 94, 0.1)', color: '#16a34a', fontWeight: 600 }}>
+                    Verified
+                  </span>
+                ) : null}
+              />
+            </div>
           </div>
 
-          {/* Billing & Location */}
-          <div className="glass-card" style={{ padding: '32px', borderRadius: '24px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-main)' }}>
+          {/* Billing & Registered Locations */}
+          <div className="glass-card" style={{ padding: '28px 32px', borderRadius: '20px' }}>
+            <h2 style={{ fontSize: '17px', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-main)' }}>
               <Building2 size={18} color="var(--secondary)" />
-              Location Details
+              Registered Locations
             </h2>
 
-            {isEditing ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Billing Address</label>
-                  <textarea className="input-field" style={{ minHeight: '100px' }} value={formData.billingAddress} onChange={e => setFormData({ ...formData, billingAddress: e.target.value })} required />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dim)' }}>Pickup Location (Map)</label>
-                  <div style={{ borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border-color)', height: '300px' }}>
-                    <MapPicker apiKey={MAPS_API_KEY} onLocationSelect={handleLocationSelect} initialLocation={formData.pickupLocation} />
-                  </div>
-                  <input type="text" className="input-field" value={formData.pickupLocation.address} onChange={e => setFormData({ ...formData, pickupLocation: { ...formData.pickupLocation, address: e.target.value } })} required placeholder="Specific address..." />
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <InfoRow label="Billing Address" value={profile.billingAddress} icon={Building2} color="#ec4899" />
-                <InfoRow label="Pickup Point" value={profile.pickupLocation.address} icon={MapPin} color="#22c55e" />
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <InfoRow
+                label="Official Business / Billing Address"
+                value={profile.billingAddress}
+                icon={Building2}
+                color="#ec4899"
+              />
+              <InfoRow
+                label="Registered Pickup Location"
+                value={pickupAddressText}
+                icon={MapPin}
+                color="#22c55e"
+                badge={hasCoordinates ? (
+                  <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', fontWeight: 600 }}>
+                    GPS: {Number(profile.pickupLocation.lat).toFixed(4)}, {Number(profile.pickupLocation.lng).toFixed(4)}
+                  </span>
+                ) : null}
+              />
+            </div>
           </div>
-
-          {isEditing && (
-            <button type="submit" className="btn-primary" style={{ padding: '16px 40px', alignSelf: 'flex-start', width: '100%' }} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : (
-                <>
-                  <Save size={20} />
-                  <span>Save All Changes</span>
-                </>
-              )}
-            </button>
-          )}
-        </form>
+        </div>
       </div>
     </Layout>
   );
