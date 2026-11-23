@@ -2,49 +2,59 @@
  * Frontend pricing helper for Seller Panel
  */
 
-export function findCategoryCommission(commissions = [], categoryId, unit, categoryName) {
+export function findCategoryCommission(commissions = [], categoryId, unit, categoryName = null, pincode = null) {
   if (!commissions || !Array.isArray(commissions) || commissions.length === 0) return null;
   const catIdStr = categoryId?._id || categoryId;
   const catName = (categoryName || categoryId?.name || '').trim().toLowerCase();
   const unitClean = (unit || '').trim().toLowerCase();
+  const targetPin = (pincode || '').toString().trim().toLowerCase();
 
-  // 1. Match category ID AND unit
-  if (catIdStr && unitClean) {
-    const match = commissions.find(c => {
-      const cCatId = c.categoryId?._id || c.categoryId;
+  // Filter commissions for this category first
+  const catComms = commissions.filter(c => {
+    const cCatId = c.categoryId?._id || c.categoryId;
+    const cName = (c.categoryId?.name || '').trim().toLowerCase();
+    const idMatch = catIdStr && String(cCatId) === String(catIdStr);
+    const nameMatch = catName && cName === catName;
+    return idMatch || nameMatch;
+  });
+
+  if (catComms.length === 0) return null;
+
+  // 1. Exact match on category + unit + specific pincode
+  if (targetPin && targetPin !== 'all') {
+    const exactPinAndUnit = catComms.find(c => {
       const cUnit = (c.unit || '').trim().toLowerCase();
-      return String(cCatId) === String(catIdStr) && cUnit === unitClean;
+      const cPin = (c.pincode || 'all').trim().toLowerCase();
+      return (unitClean ? cUnit === unitClean : true) && cPin === targetPin;
     });
-    if (match) return match;
+    if (exactPinAndUnit) return exactPinAndUnit;
   }
 
-  // 2. Match category name AND unit
-  if (catName && unitClean) {
-    const match = commissions.find(c => {
-      const cName = (c.categoryId?.name || '').trim().toLowerCase();
+  // 2. Fallback: match category + unit + pincode 'all' (or unset)
+  if (unitClean) {
+    const unitAllPin = catComms.find(c => {
       const cUnit = (c.unit || '').trim().toLowerCase();
-      return cName === catName && cUnit === unitClean;
+      const cPin = (c.pincode || 'all').trim().toLowerCase();
+      return cUnit === unitClean && (cPin === 'all' || !cPin);
     });
-    if (match) return match;
+    if (unitAllPin) return unitAllPin;
   }
 
-  // 3. Fallback to category ID only
-  if (catIdStr) {
-    const fallback = commissions.find(c => {
-      const cCatId = c.categoryId?._id || c.categoryId;
-      return String(cCatId) === String(catIdStr);
+  // 3. Fallback: specific pincode match on category
+  if (targetPin && targetPin !== 'all') {
+    const pinMatch = catComms.find(c => {
+      const cPin = (c.pincode || 'all').trim().toLowerCase();
+      return cPin === targetPin;
     });
-    if (fallback) return fallback;
+    if (pinMatch) return pinMatch;
   }
 
-  // 4. Fallback to category name only
-  if (catName) {
-    const fallback = commissions.find(c => {
-      const cName = (c.categoryId?.name || '').trim().toLowerCase();
-      return cName === catName;
-    });
-    if (fallback) return fallback;
-  }
+  // 4. Fallback: category default with pincode 'all'
+  const fallbackAll = catComms.find(c => {
+    const cPin = (c.pincode || 'all').trim().toLowerCase();
+    return cPin === 'all' || !cPin;
+  });
+  if (fallbackAll) return fallbackAll;
 
   return null;
 }

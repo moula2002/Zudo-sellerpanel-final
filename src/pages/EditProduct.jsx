@@ -255,9 +255,22 @@ const EditProduct = () => {
     fetchData();
   }, [id]);
 
+  const getSellerPincode = () => {
+    try {
+      const seller = JSON.parse(localStorage.getItem('zudo_seller_user') || '{}');
+      if (seller.pincode) return seller.pincode;
+      const addr = seller.businessAddress || seller.pickupLocation?.address || '';
+      const match = addr.match(/\b\d{6}\b/);
+      return match ? match[0] : null;
+    } catch {
+      return null;
+    }
+  };
+
   // Sync with Admin category commission if seller changes Category or Unit
   const handleCategoryOrUnitChange = (catId, unitStr) => {
-    const rule = findCategoryCommission(commissions, catId, unitStr);
+    const sellerPin = getSellerPincode();
+    const rule = findCategoryCommission(commissions, catId, unitStr, null, sellerPin);
     if (rule) {
       setFormData(prev => ({
         ...prev,
