@@ -10,8 +10,13 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const getInvoiceReference = (invoice) => {
-  if (invoice.orderNumber) return `#${String(invoice.orderNumber).padStart(5, '0')}`;
-  return `#${invoice.invoiceNumber || invoice.invoiceSequenceNumber || invoice._id.toString().substring(0, 6)}`;
+  if (!invoice) return '#-';
+  const rawNum = invoice.orderNumber ?? invoice.invoiceNumber ?? invoice.invoiceSequenceNumber;
+  if (rawNum !== undefined && rawNum !== null && String(rawNum).trim()) {
+    const clean = String(rawNum).trim().replace(/^#/, '');
+    return /^\d+$/.test(clean) ? `#${clean.padStart(5, '0')}` : `#${clean}`;
+  }
+  return invoice._id ? `#${String(invoice._id).substring(0, 6)}` : '#-';
 };
 
 const getOrderDisplayId = (order) => {

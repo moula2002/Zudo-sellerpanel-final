@@ -364,7 +364,12 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
     const invoiceOrderIds = [...new Set([invoice.orderId, ...(invoice.orders || [])].map(idString).filter(Boolean))];
     const linkedOrders = invoiceOrderIds.map(orderId => ordersById.get(orderId)).filter(Boolean);
     const order = linkedOrders[0];
-    const invoiceReference = invoice.invoiceNumber || idString(invoice._id);
+    const rawInvNum = invoice.orderNumber ?? invoice.invoiceNumber ?? invoice.invoiceSequenceNumber;
+    let invoiceReference = idString(invoice._id);
+    if (rawInvNum !== undefined && rawInvNum !== null && String(rawInvNum).trim()) {
+      const clean = String(rawInvNum).trim().replace(/^#/, '');
+      invoiceReference = /^\d+$/.test(clean) ? `#${clean.padStart(5, '0')}` : `#${clean}`;
+    }
     invoiceOrderIds.forEach(orderId => {
       const linkedOrder = ordersById.get(orderId);
       if (linkedOrder) linkedOrder._historyDetails.invoiceReferences.push(invoiceReference);
