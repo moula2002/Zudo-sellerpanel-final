@@ -364,16 +364,13 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
     const invoiceOrderIds = [...new Set([invoice.orderId, ...(invoice.orders || [])].map(idString).filter(Boolean))];
     const linkedOrders = invoiceOrderIds.map(orderId => ordersById.get(orderId)).filter(Boolean);
     const order = linkedOrders[0];
-    const rawInvNum = invoice.orderNumber ?? invoice.invoiceNumber ?? invoice.invoiceSequenceNumber;
-    let invoiceReference = idString(invoice._id);
-    if (rawInvNum !== undefined && rawInvNum !== null && String(rawInvNum).trim()) {
-      const clean = String(rawInvNum).trim().replace(/^#/, '');
-      invoiceReference = /^\d+$/.test(clean) ? `#${clean.padStart(5, '0')}` : `#${clean}`;
-    }
+    const rawInvNum = invoice.invoiceNumber || (invoice.invoiceSequenceNumber ? `INV-${String(invoice.invoiceSequenceNumber).padStart(5, '0')}` : idString(invoice._id));
+    const invoiceReference = String(rawInvNum).trim();
     invoiceOrderIds.forEach(orderId => {
       const linkedOrder = ordersById.get(orderId);
       if (linkedOrder) linkedOrder._historyDetails.invoiceReferences.push(invoiceReference);
     });
+    const linkedOrderRef = order ? order._historyReference : (invoice.orderNumber ? `#${String(invoice.orderNumber).padStart(5, '0')}` : '');
     add({
       id: `fallback:invoice:${idString(invoice._id)}`,
       activityType: 'invoices',
@@ -381,8 +378,8 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
       occurredAt: validTimestamp(invoice.createdAt),
       referenceId: invoiceReference,
       customer: order?._historyCustomer || {},
-      description: invoice.orderNumber
-        ? `Invoice for order #${String(invoice.orderNumber).padStart(5, '0')}`
+      description: linkedOrderRef
+        ? `Invoice for order ${linkedOrderRef}`
         : 'Seller invoice generated',
       amount: invoice.netAmount ?? invoice.totalAmount ?? null,
       status: invoice.status || '',
@@ -394,6 +391,7 @@ const buildLegacyHistory = ({ seller, products, orders, invoices, pickups, retur
         invoiceNumber: invoiceReference,
         orderId: invoiceOrderIds[0] || '',
         orderNumber: invoice.orderNumber ?? '',
+        orderReference: linkedOrderRef,
         startDate: invoice.startDate || null,
         endDate: invoice.endDate || null,
         hasInvoiceImage: Boolean(invoice.hasInvoiceImage || invoice.imageCount || invoice.invoiceImage),
@@ -1564,12 +1562,17 @@ const History = () => {
 
             {/* Invoices */}
             {(details.invoiceReferences?.length > 0 || details.invoiceNumber) && (
-              <div style={{ padding: '12px 14px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 12, marginBottom: 20, fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ padding: '12px 14px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 12, marginBottom: 20, fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <FileText size={16} color="#7c3aed" />
                 <span>
-                  <strong>Invoice Reference: </strong>
+                  <strong>Invoice Number: </strong>
                   {[details.invoiceNumber, ...(details.invoiceReferences || [])].filter(Boolean).join(', ')}
                 </span>
+                {details.orderReference && (
+                  <span style={{ marginLeft: 12, color: 'var(--text-dim)' }}>
+                    • Linked Order: <strong style={{ color: 'var(--text-main)', fontFamily: 'monospace' }}>{details.orderReference}</strong>
+                  </span>
+                )}
               </div>
             )}
 

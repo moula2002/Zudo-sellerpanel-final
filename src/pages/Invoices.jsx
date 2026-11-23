@@ -9,15 +9,34 @@ import Layout from '../components/Layout';
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-const getInvoiceReference = (invoice) => {
-  if (!invoice) return '#-';
-  const rawNum = invoice.orderNumber ?? invoice.invoiceNumber ?? invoice.invoiceSequenceNumber;
-  if (rawNum !== undefined && rawNum !== null && String(rawNum).trim()) {
-    const clean = String(rawNum).trim().replace(/^#/, '');
+const getInvoiceNumberDisplay = (invoice) => {
+  if (!invoice) return '—';
+  if (invoice.invoiceNumber && String(invoice.invoiceNumber).trim()) {
+    return String(invoice.invoiceNumber).trim();
+  }
+  if (invoice.invoiceSequenceNumber) {
+    return `INV-${String(invoice.invoiceSequenceNumber).padStart(5, '0')}`;
+  }
+  return invoice._id ? `#${String(invoice._id).substring(0, 6)}` : '—';
+};
+
+const getOrderReferenceDisplay = (invoice) => {
+  if (!invoice) return '—';
+  if (invoice.orderNumber !== undefined && invoice.orderNumber !== null && String(invoice.orderNumber).trim()) {
+    const clean = String(invoice.orderNumber).replace(/^#/, '');
     return /^\d+$/.test(clean) ? `#${clean.padStart(5, '0')}` : `#${clean}`;
   }
-  return invoice._id ? `#${String(invoice._id).substring(0, 6)}` : '#-';
+  if (invoice.orderRef) return `#${invoice.orderRef}`;
+  const primaryOrder = invoice.orderId || (invoice.orders && invoice.orders[0]);
+  if (primaryOrder && typeof primaryOrder === 'object') {
+    if (primaryOrder.orderNumber) return `#${String(primaryOrder.orderNumber).padStart(5, '0')}`;
+    if (primaryOrder.orderRef) return `#${primaryOrder.orderRef}`;
+    if (primaryOrder.orderId) return `#${primaryOrder.orderId}`;
+  }
+  return '—';
 };
+
+const getInvoiceReference = (invoice) => getInvoiceNumberDisplay(invoice);
 
 const getOrderDisplayId = (order) => {
   if (order.orderNumber) return String(order.orderNumber).padStart(5, '0');
@@ -37,9 +56,11 @@ const Invoices = () => {
   const [orderSearches, setOrderSearches] = useState({});
   const [activeOrderEntryId, setActiveOrderEntryId] = useState(null);
 
+  const [nextExpectedInvNum, setNextExpectedInvNum] = useState('');
   const [invoiceEntries, setInvoiceEntries] = useState([
     {
       id: 1,
+      invoiceNumber: '',
       startDate: '',
       endDate: '',
       orderId: '',
@@ -69,6 +90,7 @@ const Invoices = () => {
   useEffect(() => {
     fetchInvoices();
     fetchOrders();
+    fetchNextNumber();
   }, []);
 
   // Clean up blob URLs on unmount
@@ -147,6 +169,17 @@ const Invoices = () => {
     }
   }
 
+  async function fetchNextNumber() {
+    try {
+      const { data } = await api.get('/seller-invoices/next-number');
+      if (data?.nextInvoiceNumber) {
+        setNextExpectedInvNum(data.nextInvoiceNumber);
+      }
+    } catch {
+      // Missing or error is non-fatal
+    }
+  }
+
   // Loads primary thumbnail image
   async function loadAuthenticatedPrimaryImage(invoiceId) {
     if (!invoiceId || imageBlobs[invoiceId]?.primary || imageLoading[`${invoiceId}_primary`]) return;
@@ -207,6 +240,7 @@ const Invoices = () => {
         ...prev,
         {
           id: Date.now() + Math.random(),
+          invoiceNumber: '',
           startDate: lastEntry?.startDate || '',
           endDate: lastEntry?.endDate || '',
           orderId: '',
@@ -354,6 +388,7 @@ const Invoices = () => {
       const formData = new FormData();
 
       const metadata = invoiceEntries.map(entry => ({
+        invoiceNumber: entry.invoiceNumber ? entry.invoiceNumber.trim() : undefined,
         startDate: entry.startDate,
         endDate: entry.endDate,
         orderId: entry.orderId
@@ -387,6 +422,7 @@ const Invoices = () => {
       setInvoiceEntries([
         {
           id: Date.now(),
+          invoiceNumber: '',
           startDate: '',
           endDate: '',
           orderId: '',
@@ -404,6 +440,7 @@ const Invoices = () => {
 
       await fetchInvoices();
       await fetchOrders();
+      await fetchNextNumber();
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to generate invoice(s).';
       setError(msg);
@@ -589,37 +626,7 @@ const Invoices = () => {
                 </div>
 
                 {/* Required invoice fields */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '20px' }}>
-                  {/* START DATE */}
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>
-                      START DATE *
-                    </label>
-                    <input 
-                      type="date" 
-                      className="input-field" 
-                      value={entry.startDate} 
-                      onChange={(e) => updateEntryField(entry.id, 'startDate', e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
-                      required
-                    />
-                  </div>
-
-                  {/* END DATE */}
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>
-                      END DATE *
-                    </label>
-                    <input 
-                      type="date" 
-                      className="input-field" 
-                      value={entry.endDate} 
-                      onChange={(e) => updateEntryField(entry.id, 'endDate', e.target.value)}
-                      max={new Date().toISOString().split('T')[0]}
-                      required
-                    />
-                  </div>
-
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
                   {/* ORDER ID */}
                   <div style={{ position: 'relative' }}>
                     <label htmlFor={`invoice-order-search-${entry.id}`} style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>
@@ -696,6 +703,52 @@ const Invoices = () => {
                         )}
                       </div>
                     )}
+                  </div>
+
+                  {/* INVOICE NUMBER */}
+                  <div>
+                    <label htmlFor={`invoice-num-${entry.id}`} style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                      INVOICE NUMBER
+                    </label>
+                    <input
+                      id={`invoice-num-${entry.id}`}
+                      type="text"
+                      className="input-field"
+                      placeholder={nextExpectedInvNum ? `Auto: ${nextExpectedInvNum}` : 'Auto (e.g. INV-00001)'}
+                      value={entry.invoiceNumber || ''}
+                      onChange={(e) => updateEntryField(entry.id, 'invoiceNumber', e.target.value)}
+                      style={{ fontFamily: 'monospace', fontWeight: 600 }}
+                    />
+                  </div>
+
+                  {/* START DATE */}
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                      START DATE *
+                    </label>
+                    <input 
+                      type="date" 
+                      className="input-field" 
+                      value={entry.startDate} 
+                      onChange={(e) => updateEntryField(entry.id, 'startDate', e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
+                      required
+                    />
+                  </div>
+
+                  {/* END DATE */}
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                      END DATE *
+                    </label>
+                    <input 
+                      type="date" 
+                      className="input-field" 
+                      value={entry.endDate} 
+                      onChange={(e) => updateEntryField(entry.id, 'endDate', e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
+                      required
+                    />
                   </div>
                 </div>
 
@@ -936,6 +989,7 @@ const Invoices = () => {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--glass-bg)' }}>
+              <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>INVOICE NUMBER</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>ORDER ID</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>INVOICE IMAGES</th>
               <th style={{ padding: '16px 24px', color: 'var(--text-dim)', fontSize: '12px', fontWeight: 700, letterSpacing: '0.5px' }}>BILLING PERIOD</th>
@@ -947,13 +1001,13 @@ const Invoices = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}>
+                <td colSpan="7" style={{ padding: '40px', textAlign: 'center' }}>
                   <div className="animate-spin" style={{ display: 'inline-block' }}><FileText size={24} /></div>
                 </td>
               </tr>
             ) : invoices.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
                   No invoices generated yet. Generate your first invoice above.
                 </td>
               </tr>
@@ -964,7 +1018,7 @@ const Invoices = () => {
 
               return (
                 <tr key={inv._id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.02)' }} className="table-row-hover">
-                  {/* ORDER / INVOICE REFERENCE */}
+                  {/* INVOICE NUMBER */}
                   <td style={{ padding: '16px 24px', fontWeight: 700 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{
@@ -973,11 +1027,27 @@ const Invoices = () => {
                         padding: '4px 10px',
                         borderRadius: '8px',
                         fontSize: '13px',
-                        fontWeight: 800
+                        fontWeight: 800,
+                        fontFamily: 'monospace'
                       }}>
-                        {getInvoiceReference(inv)}
+                        {getInvoiceNumberDisplay(inv)}
                       </span>
                     </div>
+                  </td>
+
+                  {/* ORDER ID */}
+                  <td style={{ padding: '16px 24px' }}>
+                    <span style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      color: 'var(--text-main)',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      fontFamily: 'monospace'
+                    }}>
+                      {getOrderReferenceDisplay(inv)}
+                    </span>
                   </td>
 
                   {/* INVOICE IMAGES (THUMBNAIL & COUNT) */}
@@ -1182,8 +1252,11 @@ const Invoices = () => {
                   INVOICE DETAILS
                 </span>
                 <h3 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
-                  Order / Invoice Reference {getInvoiceReference(selectedInvoice)}
+                  Invoice {getInvoiceNumberDisplay(selectedInvoice)}
                 </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-dim)' }}>
+                  Linked Order: <strong style={{ color: 'var(--text-main)', fontFamily: 'monospace' }}>{getOrderReferenceDisplay(selectedInvoice)}</strong>
+                </p>
               </div>
               <button
                 onClick={() => setShowModal(false)}
@@ -1229,9 +1302,9 @@ const Invoices = () => {
                 </span>
               </div>
               <div style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Total Orders</span>
-                <span style={{ fontSize: '16px', fontWeight: 800 }}>
-                  {selectedInvoice.orderCount || selectedInvoice.orders?.length || 0} Orders
+                <span style={{ fontSize: '11px', color: 'var(--text-dim)', display: 'block' }}>Linked Order ID</span>
+                <span style={{ fontSize: '16px', fontWeight: 800, fontFamily: 'monospace', color: '#60a5fa' }}>
+                  {getOrderReferenceDisplay(selectedInvoice)}
                 </span>
               </div>
             </div>
