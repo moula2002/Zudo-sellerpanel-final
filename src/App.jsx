@@ -167,6 +167,23 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/sellers/history"
+          element={
+            <ProtectedRoute>
+              <History />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/seller/history"
+          element={
+            <ProtectedRoute>
+              <History />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
     </ThemeProvider>
