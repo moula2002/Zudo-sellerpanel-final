@@ -915,6 +915,22 @@ const AddProduct = () => {
               </div>
 
               <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 600 }}>
+                  Stock Quantity {b2bVariants.length === 0 ? '*' : '(Base)'}
+                </label>
+                <input 
+                  type="number" 
+                  name="stock" 
+                  className="input-field" 
+                  value={formData.stock} 
+                  onChange={handleInputChange} 
+                  required={b2bVariants.length === 0}
+                  min="0"
+                  placeholder="0" 
+                />
+              </div>
+
+              <div>
                 <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-main)', marginBottom: '8px', fontWeight: 500 }}>
                   Stock Status
                 </label>

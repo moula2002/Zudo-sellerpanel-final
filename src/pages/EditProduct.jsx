@@ -583,6 +583,7 @@ const EditProduct = () => {
 
       await api.put(`/products/${id}`, {
         ...formData,
+        stock: parseInt(formData.stock, 10) || 0,
         unit: formData.unit ? formData.unit.toUpperCase() : 'BAG',
         packagingType: (formData.packagingType || formData.unit || 'BAG').toUpperCase(),
         measurementBasis: (formData.measurementBasis || formData.measurementUnit || 'KG').toUpperCase(),
@@ -944,6 +945,21 @@ const EditProduct = () => {
                     placeholder="e.g. 25010090"
                     value={formData.hsn}
                     onChange={e => setFormData({ ...formData, hsn: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Stock Quantity {b2bVariants.length === 0 ? '*' : '(Base)'}
+                  </label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    placeholder="0"
+                    min="0"
+                    value={formData.stock}
+                    onChange={e => setFormData({ ...formData, stock: e.target.value })}
+                    required={b2bVariants.length === 0}
                   />
                 </div>
 
