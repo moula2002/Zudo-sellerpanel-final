@@ -68,6 +68,86 @@ const getDriverDisplayName = (driver, assignmentStatus) => {
   return 'Not Assigned';
 };
 
+// Reusable seller-side item calculation matching Orders.jsx
+const getSellerItemPricing = (item) => {
+  const quantity = Number(item.quantity) || 1;
+  const unitPrice = item.normalPrice !== undefined && item.normalPrice !== null
+    ? Number(item.normalPrice)
+    : (item.netPrice !== undefined && item.netPrice !== null
+        ? Number(item.netPrice)
+        : (item.sellerUnitPrice !== undefined && item.sellerUnitPrice !== null
+            ? Number(item.sellerUnitPrice)
+            : Number(item.price || 0)));
+
+  const lineTotal = item.totalSellerAmount !== undefined && item.totalSellerAmount !== null && Number(item.totalSellerAmount) > 0
+    ? Number(item.totalSellerAmount)
+    : (item.netTotal !== undefined && item.netTotal !== null && Number(item.netTotal) > 0
+        ? Number(item.netTotal)
+        : unitPrice * quantity);
+
+  const gstAmount = Number(item.gstAmount ?? item.totalGst ?? 0);
+
+  return {
+    unitPrice,
+    lineTotal,
+    gstAmount
+  };
+};
+
+const normalizePickupWithOrder = (pickup, matchingOrder) => {
+  const sourceItems = matchingOrder?.items?.length ? matchingOrder.items : (pickup.items || []);
+
+  const enrichedItems = sourceItems.map((item, index) => {
+    const pickupItem = (pickup.items || [])[index] || {};
+    const pricing = getSellerItemPricing(item);
+
+    return {
+      ...pickupItem,
+      ...item,
+      name: item.name || pickupItem.name || 'Product',
+      quantity: Number(item.quantity || pickupItem.quantity) || 1,
+      unitPrice: pricing.unitPrice,
+      amount: pricing.lineTotal,
+      gstAmount: pricing.gstAmount,
+      unitLabel: pickupItem.unitLabel || [
+        item.variantSize,
+        item.productUnitSize && item.productUnitSize !== 1
+          ? `${item.productUnitSize} ${item.measurementBasis || item.measurementUnit || ''}`.trim()
+          : null,
+        item.packagingType || item.unit || item.sellingUnit
+      ].filter(Boolean).join(' · ')
+    };
+  });
+
+  const calculatedSubtotal = enrichedItems.reduce((acc, it) => acc + it.amount, 0);
+  const calculatedTax = enrichedItems.reduce((acc, it) => acc + it.gstAmount, 0);
+  const calculatedGrandTotal = calculatedSubtotal + calculatedTax;
+
+  let grandTotal = calculatedGrandTotal;
+  if (matchingOrder) {
+    if (matchingOrder.totalAmountWithoutCommissions !== undefined && matchingOrder.totalAmountWithoutCommissions !== null && Number(matchingOrder.totalAmountWithoutCommissions) > 0) {
+      grandTotal = Number(matchingOrder.totalAmountWithoutCommissions);
+    } else if (matchingOrder.sellerItemsNetTotal !== undefined && matchingOrder.sellerItemsNetTotal !== null && Number(matchingOrder.sellerItemsNetTotal) > 0) {
+      grandTotal = Number(matchingOrder.sellerItemsNetTotal);
+    }
+  } else if (pickup.totalAmountWithoutCommissions !== undefined && pickup.totalAmountWithoutCommissions !== null && Number(pickup.totalAmountWithoutCommissions) > 0) {
+    grandTotal = Number(pickup.totalAmountWithoutCommissions);
+  } else if (pickup.sellerItemsNetTotal !== undefined && pickup.sellerItemsNetTotal !== null && Number(pickup.sellerItemsNetTotal) > 0) {
+    grandTotal = Number(pickup.sellerItemsNetTotal);
+  }
+
+  const taxAmount = calculatedTax;
+  const subtotal = Math.max(0, grandTotal - taxAmount);
+
+  return {
+    ...pickup,
+    items: enrichedItems,
+    subtotal: subtotal > 0 ? subtotal : calculatedSubtotal,
+    taxAmount,
+    totalAmount: grandTotal
+  };
+};
+
 const PickupCard = ({ pickup, onGenerateInvoice }) => {
   const customer = pickup.customer || {};
   const driver = pickup.driver;
@@ -139,7 +219,9 @@ const PickupCard = ({ pickup, onGenerateInvoice }) => {
               <span style={{ color: 'var(--text-main)', minWidth: 0 }}>
                 {item.name || 'Product'}
                 {item.unitLabel && <span style={{ display: 'block', color: 'var(--text-dim)' }}>{item.unitLabel}</span>}
-                <span style={{ color: 'var(--text-dim)' }}>Qty: {item.quantity}</span>
+                <span style={{ color: 'var(--text-dim)' }}>
+                  Qty: {item.quantity} × {formatMoney(item.unitPrice)}
+                </span>
               </span>
               <span style={{ color: 'var(--text-main)', whiteSpace: 'nowrap' }}>{formatMoney(item.amount)}</span>
             </div>
@@ -183,14 +265,36 @@ const Pickups = () => {
     const initData = async () => {
       setLoading(true);
       setError('');
-      const [pickupsResult, sellerResult] = await Promise.allSettled([
+      const [pickupsResult, ordersResult, sellerResult] = await Promise.allSettled([
         api.get('/sellers/pickups'),
+        api.get('/sellers/orders'),
         api.get('/sellers/me')
       ]);
       if (!active) return;
 
+      const ordersList = ordersResult.status === 'fulfilled' && Array.isArray(ordersResult.value.data)
+        ? ordersResult.value.data
+        : [];
+
+      const ordersMap = new Map();
+      ordersList.forEach(order => {
+        if (order._id) ordersMap.set(String(order._id), order);
+        if (order.orderId) ordersMap.set(String(order.orderId), order);
+        if (order.orderNumber !== undefined && order.orderNumber !== null) {
+          ordersMap.set(String(order.orderNumber), order);
+        }
+      });
+
       if (pickupsResult.status === 'fulfilled' && Array.isArray(pickupsResult.value.data)) {
-        setPickups(pickupsResult.value.data);
+        const rawPickups = pickupsResult.value.data;
+        const normalized = rawPickups.map(pickup => {
+          const match = (pickup._id && ordersMap.get(String(pickup._id))) ||
+            (pickup.orderId && ordersMap.get(String(pickup.orderId))) ||
+            (pickup.orderNumber !== undefined && ordersMap.get(String(pickup.orderNumber))) ||
+            null;
+          return normalizePickupWithOrder(pickup, match);
+        });
+        setPickups(normalized);
       } else {
         const requestError = pickupsResult.status === 'rejected'
           ? pickupsResult.reason
